@@ -1,5 +1,5 @@
 
-**AudioTown** is a lightweight audio file oriented package that intends to do two things
+**AudioTown** is a lightweight audio file oriented package that intends to do two things:
 - Explain this media folder to me. 
 - It converts the lossless files (`.flac`) in your collection to more apple friendly format, `.m4a`. Supports both  high-quality _ALAC (Lossless)_ and _AAC (Lossy)_  as [codec](https://ffmpeg.org/ffmpeg-codecs.html). When it converts, it tries preserving metadata, including album artwork from source files.
 
