@@ -1,24 +1,34 @@
 Professional FLAC to Apple-friendly audio converter.
 
-**AudioTown** is a lightweight CLI utility designed to bridge the gap between high-fidelity FLAC collections and the Apple ecosystem. It converts your library into high-quality _ALAC (Lossless)_ or _AAC (Lossy)_ while preserving metadata, including album artwork.
+**AudioTown** is a lightweight audio file oriented package that intends to do two things
+- Explain this media folder to me. 
+- It converts the lossless files (.flac) in your collection to more apple friendly format, `.m4a`. Supports both  high-quality _ALAC (Lossless)_ and _AAC (Lossy)_  as codec. When it converts, it tries preserving metadata, including album artwork from the source files.
 
-# Features
+## What to expect
+1. `audiotown` contains three commands: `check`, `stats` and `convert`. This package requires `ffmepg` installed in the system. 
+   1. Installing `audiotown` first.
+   2. to run `check`. Type `audiotown check`. The command checks if `ffmpeg` is installed.
+   3. `stats` acts as an executive assisant for audio media management. Personal media library are often messy. This command starts by searching the `folder` recursively and laser focus only on audio files (filtered by suffix). It then prints out to the terminal output a summary report about how it finds: 
+      1. numbers of songs by formats, by encoding types,
+      2. storage usage details, 
+      3. what top artists, genre, album are to me ,
+      4. are they lossless or lossy, and 
+      5. detect potential unreadable or corrupt files. 
+   4. `stats` can export scanned records into a JSON file via `--report-path` flag.
+   5. `convert`. It converts all `.flac` files in a folder into lossless (`alac`) or lossy (`aac`) versions. a `alac` based `.m4a` file can be recognized in Apple eco system but not usually for .flac files. `--report-path` is available in `convert` too. To run it `audiocheck convert /path/to/flacs --encoder=alac --report-path=.`. The converted will be exported to a new folder `audiotown_export` in the same folder `path/to/flacs`. `convert` also support `--dry-run` as a tool to preview changes made in a conversion.
+      1. `convert` search files recursively so I can specify a high-level `folder` like `Media` or `myMediaHub`. Try with one ablum folder first.
+      2. `converts` support `--bitrate` when the `--encoder=aac` is specified. the default bitrate kbps is `256k`. `128k` and `320k` are the other valid inputs.
+      3. `convert` has a babit that searchs `cover.jpg` or `library.jpg` in the existing folder strucutre. if the source file does not contain an artwork, the command tires to find such file and add it into output files whenever possible.
 
-1. Lossless or Lossy: Choose between ALAC for bit-perfect archives or AAC for mobile storage.
-2. Smart Artwork: * Preserves existing embedded covers.
-3. When enabled, it automatically finds and embeds external cover.jpg or folder.png.
-4. Converts PNG covers to MJPEG for maximum Apple compatibility.
-5. Metadata Integrity: Transfers all tags (Artist, Album, Date, Genre) from source to destination.
-6. Dry Run Mode: Preview your changes before touching a single file.
-7. Informed stats for any selected media folder (audio only). Run `audiotown stats .`.
 
 # Installation
-1. Ensure you have FFmpeg installed on your system.
-2. requires `click` and `wcwidth` libaries. Python >3.10+.
+1. Ensure I have [FFmpeg](https://ffmpeg.org) installed on the system. It is the powerhouse that does the conversion and other heavy work like probing `ffprobe`. I will need it installed and working.
+2. Python >3.10+.
+3. Requires `click` and `wcwidth` libaries.
 
 ```zsh
 # Clone the repo
-git clone https://github.com/your-username/audiotown.git
+git clone https://github.com/zjgcainiao/audiotown.git
 cd audiotown
 ```
 ```zsh
@@ -42,6 +52,7 @@ Commands:
 ```
 
 ## Examples
+
 1. The simplest way to use `AudioTown` is to run it in a folder containing FLAC files: `audiotown convert /path/to/album/folder --codec=alac --report-path=/path/to/report/folder --dry-run`. The file search is resursive.
 2. the output files from `audio convert` are under the subfolder `audiotown_converted/` within `/path/to/album/folder`.
 3. The `/path/to/report/folder` can be `.` or any specified directories.
@@ -54,39 +65,56 @@ audiotown
 audiotown -h
 audiotown --help
 
-# 2. convert all flac files  to alac (default) or aac based formats. logging is controlled by `--report-path`
+# 2. check ffmpeg installation
+audiotown check
+
+# 3. show stats of a media folder 
+cd /path/to/media/folder
+audiotown stats . 
+# alternatively 
+audiotown stats  /path/to/media/folder
+audiotown stats  /path/to/media/folder --report-path=.
+
+# 5. convert all flac files  to alac (default) or aac based formats. logging is controlled by `--report-path`
 # . means current directory
 audiotown convert . --report-path=.
 audiotown convert . --codec=alac --report-path=. --dry-run
-audiotown convert . --codec=aac --report-path=. --dry-run
-
-# 3. show stats of a media folder 
-audiotown stats . 
-audiotown stats  /path/to/media/folder
-
-# 4. check ffmpeg installation
-audiotown check
+audiotown convert . --codec=aac --bitrate=256k --report-path=. --dry-run
 
 ```
 
 ## Advanced Options
-    |Option|	Description|	Default|
-    |:---|:---|:---:|
-    |--codec|	alac or aac	|alac|
-    |--bitrate|	Bitrate for AAC (128k, 256k, 320k)|	256k|
-    |--embedded-art|	Skip artwork embedding	|False|
-    |--dry-run|	Preview conversion without writing files	|False|
+
+1. overview
+
+  |Option|	Description|	Default|
+  |:---|:---|---:|
+  |--codec|	alac or aac. used with `convert`. |alac|
+  |--bitrate|	Bitrate for AAC (128k, 256k, 320k). only useful when `--codec=aac`|	256k|
+  |--dry-run|	Preview conversion without writing files	|False|
+  |--report-path|	generates a full log, including report.json	|disabled|
 
 1. Examples
- ```zsh
- audiotown convert ./AlbumFolder --codec aac --bitrate 320k
- ```
-1. Run a preview to see what would be converted:
+   
+  ```zsh
+  audiotown convert ./AlbumFolder --codec aac --bitrate 320k
+  ```
+   1. Run a preview to see what would be converted:
 
- ```zsh
- audiotown convert . --dry-run
- ```
+  ```zsh
+  audiotown convert . --dry-run
+  ```
+  2. use `codec`. It means the desired codec used for the output.
+  
+  ```zsh
+  audiotown convert . --codec=alac 
+  audiotown convert . --codec=aac --bitrate=256k 
+  audiotown convert . --codec=aac --bitrate=128k 
+
+  ```
+
 # LICENSE
 Licensed under the [MIT License](./LICENSE).
 
-Version: 1.0
+# VERSION
+Version: 1.0.1

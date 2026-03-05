@@ -29,3 +29,6 @@ dependencies = [
 [project.scripts]
 audiotown = "audiotown.main:cli_runner"
 
+[project.urls]
+Homepage = "https://github.com/zjgcainiao/audiotown"
+Issues = "https://github.com/zjgcainiao/audiotown/issues"
