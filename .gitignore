@@ -15,3 +15,6 @@ env_testpypi/
 build/
 dist/
 *.egg-info/
+
+# pypi release script and others
+scripts/
