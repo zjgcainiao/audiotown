@@ -107,18 +107,19 @@ audiotown convert . --codec=aac --bitrate=256k --report-path=. --dry-run
 
    2. use `codec` and `--bitrate`. It means the desired codec used for the output. 
   
-  ```zsh
-  audiotown convert . --codec=alac 
-  audiotown convert . --codec=aac --bitrate=256k 
-  audiotown convert . --codec=aac --bitrate=128k 
+    ```zsh
+    audiotown convert . --codec=alac 
+    audiotown convert . --codec=aac --bitrate=256k 
+    audiotown convert . --codec=aac --bitrate=128k 
 
-  ```
+    ```
 
-   3. It does not make sense to specify `bitrate` for lossless `alac` so bitrate will be ignored.
+   3. It does not make sense to specify `bitrate` for lossless `alac` so `bitrate` will be ignored.
+
   ```zsh
   cd /my/media/folder
   audiotown convert . --codec=alac --bitrate=128k 
   ```
 
 # LICENSE
-Licensed under the [MIT License](./LICENSE).
+Licensed under the [MIT License]((https://github.com/zjgcainiao/audiotown/blob/main/LICENSE)).
