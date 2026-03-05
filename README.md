@@ -79,7 +79,7 @@ audiotown stats .
 audiotown stats  /path/to/media/folder
 audiotown stats  /path/to/media/folder --report-path=.
 
-# 5. convert all flac files  to alac (default) or aac based formats. logging is controlled by `--report-path`
+# 4. convert all flac files  to alac (default) or aac based formats. logging is controlled by `--report-path`
 # . means current directory
 audiotown convert . --report-path=.
 audiotown convert . --codec=alac --report-path=. --dry-run
