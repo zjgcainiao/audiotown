@@ -2,7 +2,7 @@ Professional FLAC to Apple-friendly audio converter.
 
 **AudioTown** is a lightweight audio file oriented package that intends to do two things
 - Explain this media folder to me. 
-- It converts the lossless files (.flac) in your collection to more apple friendly format, `.m4a`. Supports both  high-quality _ALAC (Lossless)_ and _AAC (Lossy)_  as codec. When it converts, it tries preserving metadata, including album artwork from the source files.
+- It converts the lossless files (`.flac`) in your collection to more apple friendly format, `.m4a`. Supports both  high-quality _ALAC (Lossless)_ and _AAC (Lossy)_  as codec. When it converts, it tries preserving metadata, including album artwork from the source files.
 
 ## What to expect
 1. `audiotown` contains three commands: `check`, `stats` and `convert`. This package requires `ffmepg` installed in the system. 
@@ -22,8 +22,8 @@ Professional FLAC to Apple-friendly audio converter.
 
 
 # Installation
-1. Ensure I have [FFmpeg](https://ffmpeg.org) installed on the system. It is the powerhouse that does the conversion and other heavy work like probing `ffprobe`. I will need it installed and working.
-2. Python >3.10+.
+1. Ensure I have [FFmpeg](https://ffmpeg.org/download.html) installed on the system. It is the powerhouse that does the conversion and other heavy work like probing `ffprobe`. I will need it installed and working. Mac users can installed it via [homebrew](https://formulae.brew.sh/formula/ffmpeg):`brew install ffmpeg`.
+2. Python >3.10+. 
 3. Requires `click` and `wcwidth` libaries.
 
 ```zsh
@@ -35,6 +35,11 @@ cd audiotown
 # [optional but recommended] set up a virutal env named `my_env`.
 python3 -m venv my_env
 source my_env/bin/activate
+# check python version 3.10+
+python --version 
+
+# udpate pip
+pip install --upgrade pip
 
 # install dependencies 
 pip install .
@@ -94,23 +99,27 @@ audiotown convert . --codec=aac --bitrate=256k --report-path=. --dry-run
   |--dry-run|	Preview conversion without writing files	|False|
   |--report-path|	generates a full log, including report.json	|disabled|
 
-1. Examples
-   
-  ```zsh
-  audiotown convert ./AlbumFolder --codec aac --bitrate 320k
-  ```
-   1. Run a preview to see what would be converted:
+2. Examples
+
+  1. Run a preview to see what would be converted:
 
   ```zsh
-  audiotown convert . --dry-run
+  audiotown convert ./AlbumFolder --dry-run
   ```
-  2. use `codec`. It means the desired codec used for the output.
+
+  2. use `codec` and `--bitrate`. It means the desired codec used for the output. 
   
   ```zsh
   audiotown convert . --codec=alac 
   audiotown convert . --codec=aac --bitrate=256k 
   audiotown convert . --codec=aac --bitrate=128k 
 
+  ```
+
+  3. It does not make sense to specify `bitrate` for lossless `alac` so bitrate will be ignored.
+  ```zsh
+  cd /my/media/folder
+  audiotown convert . --codec=alac --bitrate=128k 
   ```
 
 # LICENSE
