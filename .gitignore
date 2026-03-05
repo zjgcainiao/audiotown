@@ -1,0 +1,17 @@
+log/
+log/*
+.DS_Store
+
+__pycache__/
+.pytest_cache/
+__pycache__/
+*.py[cod]
+*$py.class
+
+my_env/
+env_testpypi/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
