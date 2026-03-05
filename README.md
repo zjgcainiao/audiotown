@@ -88,7 +88,6 @@ audiotown convert . --codec=aac --bitrate=256k --report-path=. --dry-run
 ```
 
 ## Advanced Options
-
 1. overview
 
   |Option|	Description|	Default|
@@ -99,7 +98,6 @@ audiotown convert . --codec=aac --bitrate=256k --report-path=. --dry-run
   |--report-path|	generates a full log, including report.json	|disabled|
 
 2. Examples
-
   1. Run a preview to see what would be converted:
 
   ```zsh
