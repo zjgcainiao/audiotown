@@ -5,10 +5,10 @@
 
 # What to expect
 1. `audiotown` contains three commands: `check`, `stats` and `convert`. This package requires `ffmepg` installed in the system. 
-   1. To run them, type `auditown check` or `audio stats` or `audio conver`.
+   1. To run them, type `auditown check` or `audio stats` or `audio convert`.
    2. Type `audiotown check` to run `check`. 
    3. The command checks if `ffmpeg` is installed.
-2. `stats` acts as an executive assisant for audio media management. Personal media library are often messy. This command starts by searching the `folder` recursively and laser focus ONLY on audio files (filtered by suffix). It then prints out to the terminal output a summary report about how it finds: 
+2. `stats` acts as an executive assisant for audio media management. Personal media library are often messy. This command starts by searching the `folder` recursively and laser focus ONLY on audio files (filtered by suffix). It then prints out to the terminal a summary report about how it finds: 
    1. numbers of songs by formats, by encoding types,
    2. storage usage details, 
    3. what top artists, genre, album are to me ,
@@ -116,10 +116,10 @@ audiotown convert . --codec=aac --bitrate=256k --report-path=. --dry-run
 
    3. It does not make sense to specify `bitrate` for lossless `alac` so `bitrate` will be ignored.
 
-  ```zsh
-  cd /my/media/folder
-  audiotown convert . --codec=alac --bitrate=128k 
-  ```
+    ```zsh
+    cd /my/media/folder
+    audiotown convert . --codec=alac --bitrate=128k 
+    ```
 
 # LICENSE
 Licensed under the [MIT License]((https://github.com/zjgcainiao/audiotown/blob/main/LICENSE)).
