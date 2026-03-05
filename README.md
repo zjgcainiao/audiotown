@@ -40,7 +40,6 @@ pip install --upgrade pip
 
 pip install audiotown
 
-
 # help
 audiotown
 ```
@@ -99,13 +98,14 @@ audiotown convert . --codec=aac --bitrate=256k --report-path=. --dry-run
   |--report-path|	generates a full log, including report.json	|disabled|
 
 2. Examples
-  1. Run a preview to see what would be converted:
 
-  ```zsh
-  audiotown convert ./AlbumFolder --dry-run
-  ```
+   1. Run a preview to see what would be converted:
 
-  2. use `codec` and `--bitrate`. It means the desired codec used for the output. 
+    ```zsh
+    audiotown convert ./AlbumFolder --dry-run
+    ```
+
+   2. use `codec` and `--bitrate`. It means the desired codec used for the output. 
   
   ```zsh
   audiotown convert . --codec=alac 
@@ -114,7 +114,7 @@ audiotown convert . --codec=aac --bitrate=256k --report-path=. --dry-run
 
   ```
 
-  3. It does not make sense to specify `bitrate` for lossless `alac` so bitrate will be ignored.
+   3. It does not make sense to specify `bitrate` for lossless `alac` so bitrate will be ignored.
   ```zsh
   cd /my/media/folder
   audiotown convert . --codec=alac --bitrate=128k 
