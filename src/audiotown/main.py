@@ -385,6 +385,14 @@ def stats_cmd(
 
     unreadable_str = f"{safe_division(stats.total_files-stats.readable_files, stats.total_files * 100):>4.0f} % is unreadable or encounters errors during probes"
     logger.stream(f"{unreadable_str}\n")
+
+    # embedded artwork
+    if stats.by_has_embedded_artwork:
+        cnt_embedded_artwork = stats.by_has_embedded_artwork["has_embedded_artwork"].count
+        embedded_artwork_pc = (
+            f"{safe_division(100 * cnt_embedded_artwork, stats.total_files ):>4.0f} % contains embedded thumbnail or artwork."
+        )
+        logger.stream(f"{embedded_artwork_pc}\n", bold=True)
     if stats.bloated_files and len(stats.by_bloated):
         saved_size_mb = 0.3 * stats.by_bloated["bloated"].size_bytes / 1024**2
         saved_size_str = (
@@ -398,13 +406,7 @@ def stats_cmd(
     else:
         # f"\nnumber of file considered bloated: {float(stats.bloated_files)}"
         bloated_str = ""
-        # embedded artwork
-    if stats.by_has_embedded_artwork:
-        cnt_embedded_artwork = stats.by_has_embedded_artwork["has_embedded_artwork"].count
-        embedded_artwork_pc = (
-            f"{safe_division(100 * cnt_embedded_artwork, stats.total_files ):>4.0f} % contains thumbnail or artwork."
-        )
-        logger.stream(f"{embedded_artwork_pc}\n", bold=True)
+
     # logger.stream("\n")
     if safe_division(100 * stats.readable_files , stats.total_files )  or 0 > 0.95:
         comment_str = "Your media library looks healthy. Majority of your records are readable and in good conditions."
