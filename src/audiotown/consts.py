@@ -335,7 +335,7 @@ class FolderStats:
     by_readable: defaultdict[str, TypeSummary] = field(
         default_factory=partial(defaultdict, TypeSummary)
     )
-    by_beloated: defaultdict[str, TypeSummary] = field(
+    by_bloated: defaultdict[str, TypeSummary] = field(
         default_factory=partial(defaultdict, TypeSummary)
     )
     by_ext: defaultdict[str, TypeSummary] = field(
@@ -369,6 +369,10 @@ class FolderStats:
     fingerprints: defaultdict[str, TypeSummary] = field(
         default_factory=partial(defaultdict, TypeSummary)
     )
+    def _bump(self, table: defaultdict[str, TypeSummary], key: str, size: int) -> None:
+        ts = table[key]
+        ts.count += 1
+        ts.size_bytes += size
 
     def add(self, rec: AudioRecord) -> None:
         """Single source of truth: updates everything consistently."""
@@ -376,49 +380,58 @@ class FolderStats:
         self.records.append(rec)
         if rec.duration_sec:
             self.total_duration_sec += float(rec.duration_sec)
-
+        
+        size = rec.size_bytes
         self.total_files += 1
         self.total_bytes += rec.size_bytes
 
         # self.bytes_by_ext[rec.audio_format.ext] += rec.size_bytes
-        e = self.by_ext[rec.audio_format.ext]
-        if e:
-            e.count += 1
-            e.size_bytes += rec.size_bytes
+        self._bump(self.by_ext, rec.audio_format.ext, size)
+        self._bump(self.by_codec, rec.audio_format.codec_name, size)
+        self._bump(self.by_family, rec.family(), size)
+        self._bump(self.by_tier, rec.quality_tier(), size)
+        # e = self.by_ext[rec.audio_format.ext]
+        # if e:
+        #     e.count += 1
+        #     e.size_bytes += rec.size_bytes
 
-        c = self.by_codec[rec.audio_format.codec_name]
-        if c:
-            c.count += 1
-            c.size_bytes += rec.size_bytes
+        # c = self.by_codec[rec.audio_format.codec_name]
+        # if c:
+        #     c.count += 1
+        #     c.size_bytes += rec.size_bytes
 
-        f = self.by_family[rec.family()]
-        if f:
-            f.count += 1
-            f.size_bytes += rec.size_bytes
+        # f = self.by_family[rec.family()]
+        # if f:
+        #     f.count += 1
+        #     f.size_bytes += rec.size_bytes
 
-        qt = self.by_tier[rec.quality_tier()]
-        if qt:
-            qt.count += 1
-            qt.size_bytes += rec.size_bytes
+        # qt = self.by_tier[rec.quality_tier()]
+        # if qt:
+        #     qt.count += 1
+        #     qt.size_bytes += rec.size_bytes
 
         # health
         if rec.readable:
             self.readable_files += 1
-            self.by_readable["readable"].count += 1
-            self.by_readable["readable"].size_bytes += rec.size_bytes
+            self._bump(self.by_readable, "readable", size)
+            # self.by_readable["readable"].count += 1
+            # self.by_readable["readable"].size_bytes += rec.size_bytes
         else:
-            self.by_readable["unreadble_or_contain_errors"].count += 1
-            self.by_readable["unreadble_or_contain_errors"].size_bytes += rec.size_bytes
+            self._bump(self.by_readable, "unreadable_or_errors", size)
+            # self.by_readable["unreadable_or_contain_errors"].count += 1
+            # self.by_readable["unreadable_or_contain_errors"].size_bytes += rec.size_bytes
 
         if rec.is_storage_inefficient():
             self.bloated_files += 1
-            self.by_beloated["beloated"].count += 1
-            self.by_beloated["beloated"].size_bytes += rec.size_bytes
+            self._bump(self.by_bloated, "bloated", size)
+
+            # self.by_belated["bloated"].count += 1
+            # self.by_belated["bloated"].size_bytes += rec.size_bytes
 
         # tags -> counters (only count non-empty)
         if rec.artist:
             if rec.artist == AudioFamily.UNKNOWN.value:
-                self.missing_artist
+                self.missing_artist +=1
             self.artists[rec.artist].count += 1
             self.artists[rec.artist].size_bytes += rec.size_bytes
 

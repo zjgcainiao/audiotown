@@ -385,8 +385,8 @@ def stats_cmd(
 
     unreadable_str = f"{safe_division(stats.total_files-stats.readable_files, stats.total_files * 100):>4.0f} % is unreadable or encounters errors during probes"
     logger.stream(f"{unreadable_str}\n")
-    if stats.bloated_files and len(stats.by_beloated):
-        saved_size_mb = 0.3 * stats.by_beloated["beloated"].size_bytes / 1024**2
+    if stats.bloated_files and len(stats.by_bloated):
+        saved_size_mb = 0.3 * stats.by_bloated["bloated"].size_bytes / 1024**2
         saved_size_str = (
             f"{saved_size_mb/1024:.1f} GB"
             if saved_size_mb > 1024
@@ -396,7 +396,7 @@ def stats_cmd(
         bloated_str = f"We've found {int(stats.bloated_files)} files (potential .wav, .pcm files) that can be converted to flac without damaging your hearing experience. It may save {saved_size_str}."
         logger.stream(bloated_str)
     else:
-        # f"\nnumber of file considered beloated: {float(stats.bloated_files)}"
+        # f"\nnumber of file considered bloated: {float(stats.bloated_files)}"
         bloated_str = ""
     # logger.stream("\n")
     if safe_division(stats.readable_files , stats.total_files * 100) > 0.95:
