@@ -6,7 +6,7 @@ from audiotown.logger import SessionLogger
 from audiotown.logger import logger
 from audiotown.consts import AudioFormat, FFmpegConfig, BitrateTier
 from audiotown.utils import find_external_cover
-from audiotown.stats import get_stream_info, probe_file
+from audiotown.stats import  probe_file
 
 def convert_flac_to_apple_friendly(
         file_path: Path,

@@ -1,18 +1,15 @@
 from __future__ import annotations
+import click
 from enum import Enum
 from pathlib import Path
-from dataclasses import dataclass,  field
-from typing import Optional, Tuple, Dict, List, Any
+from dataclasses import dataclass, field
+from typing import Optional, Tuple, Dict, List, Any, cast,Set
 from collections import Counter, defaultdict
 from functools import partial
-from audiotown.utils import to_int
+from audiotown.utils import to_int, div_blocks
+from audiotown.logger import SessionLogger
 
 
-bitrate_map = {
-    "high": "320k",
-    "medium": "256k",
-    "low": "128k",
-}
 
 class BitrateTier(str, Enum):
     HIGH = "320k"
@@ -23,30 +20,34 @@ class BitrateTier(str, Enum):
     def get_value(cls, key: str) -> str:
         # Allows you to look up "high" and get "320k" safely
         return cls[key.upper()].value
+
     @classmethod
     def from_str(cls, label: str):
         """Safely find a tier by string, case-insensitive."""
         try:
             return cls[label.upper()]
         except (KeyError, AttributeError):
-            return None # Or return cls.MEDIUM as a safe fallback
+            return None  # Or return cls.MEDIUM as a safe fallback
+
     @classmethod
-    def supported_bitrates(cls) -> List[str]:
+    def supported_bitrates(cls) -> set[str]:
         # Allows you to look up "high" and get "320k" safely
-        
-        list = [member.value for member in cls]
-        return list 
+
+        a_set = {member.value for member in cls}
+        return a_set
+
 
 @dataclass(slots=True)
 class TypeSummary:
     count: int = 0
     size_bytes: int = 0
 
+
 @dataclass(frozen=True, slots=True)
 class AudioStream:
     streams: List[Dict[str, Any]] = field(default_factory=list)
     format: Dict[str, Any] = field(default_factory=dict)
-    
+
     @classmethod
     def from_ffprobe_json(cls, data: Dict[str, Any]) -> "AudioStream":
         """
@@ -57,15 +58,12 @@ class AudioStream:
         format_info = data.get("format", {})
         return cls(streams=streams, format=format_info)
 
-@dataclass(frozen=True)
-class FFmpegConfig:
-    ffmpeg_path: str
-    ffprobe_path: str
 
 class AudioFamily(str, Enum):
     LOSSLESS = "lossless"
     LOSSY = "lossy"
     UNKNOWN = "unknown"
+
 
 class QualityTier(str, Enum):
     LOSSLESS_HIRES = "lossless_hires"
@@ -78,30 +76,35 @@ class QualityTier(str, Enum):
     LOSSY_UNKNOWN = "lossy_unknown"
     UNKNOWN = "unknown"
 
+
 class AudioFormat(Enum):
     # Member = (extension, codec_name, encoder, is_lossy, description)
     # --- LOSSLESS ---
-    FLAC   = (".flac", "flac",      "flac",       False, "Free Lossless Audio Codec")
-    ALAC   = (".m4a",  "alac",      "alac",       False, "Apple Lossless")
-    WAV    = (".wav",  "pcm_s16le", "pcm_s16le",  False, "WAV 16-bit")
-    WAV24  = (".wav",  "pcm_s24le", "pcm_s24le",  False, "WAV 24-bit")
-    
+    FLAC = (".flac", "flac", "flac", False, "Free Lossless Audio Codec")
+    ALAC = (".m4a", "alac", "alac", False, "Apple Lossless")
+    WAV = (".wav", "pcm_s16le", "pcm_s16le", False, "WAV 16-bit")
+    WAV24 = (".wav", "pcm_s24le", "pcm_s24le", False, "WAV 24-bit")
+
     # --- LOSSY ---
-    AAC    = (".m4a",  "aac",        "aac",        True,  "Advanced Audio Coding")
-    M4B    = (".m4b",  "aac",        "aac",        True,  "MPEG-4 Audiobook")
-    MP3    = (".mp3",  "mp3",        "libmp3lame", True,  "MP3 Audio (LAME)")
-    OPUS   = (".opus", "opus",       "libopus",    True,  "Opus Interactive Audio")
-    VORBIS = (".ogg",  "vorbis",     "libvorbis",  True,  "Ogg Vorbis")
-    WMA    = (".wma",  "wmav2",      "wmav2",      True,  "Windows Media Audio")
-   
+    AAC = (".m4a", "aac", "aac", True, "Advanced Audio Coding")
+    M4B = (".m4b", "aac", "aac", True, "MPEG-4 Audiobook")
+    MP3 = (".mp3", "mp3", "libmp3lame", True, "MP3 Audio (LAME)")
+    OPUS = (".opus", "opus", "libopus", True, "Opus Interactive Audio")
+    VORBIS = (".ogg", "vorbis", "libvorbis", True, "Ogg Vorbis")
+    WMA = (".wma", "wmav2", "wmav2", True, "Windows Media Audio")
+
     # requires 4 arguments
-    def __init__(self, ext: str, codec_name: str, encoder: str, is_lossy: bool, description: str):
+    def __init__(
+        self, ext: str, codec_name: str, encoder: str, is_lossy: bool, description: str
+    ):
         self.ext = ext
-        self.codec_name = codec_name   # matching `codec_name` from ffprobe -of json output
-        self.encoder = encoder     # Use this for the '-c:a' flag in FFmpeg
+        self.codec_name = (
+            codec_name  # matching `codec_name` from ffprobe -of json output
+        )
+        self.encoder = encoder  # Use this for the '-c:a' flag in FFmpeg
         self.is_lossy = is_lossy
         self.description = description
-    
+
     @classmethod
     def from_suffix(cls, suffix: str) -> AudioFormat | None:
         """Find the default format for a given suffix (e.g. .m4a -> ALAC)."""
@@ -118,6 +121,7 @@ class AudioFormat(Enum):
             if member.codec_name == codec_name.lower():
                 return member
         return None
+
     @classmethod
     def is_supported(cls, suffix: str):
         if suffix and suffix.strip() and suffix in {member.ext for member in cls}:
@@ -128,7 +132,7 @@ class AudioFormat(Enum):
     def supported_extensions(cls) -> set[str]:
         """Returns all unique extensions we care about for scanning."""
         return {member.ext for member in cls}
-    
+
     @property
     def is_pcm(self) -> bool:
         """Checks if the codec is a Pulse Code Modulation (Raw) format."""
@@ -137,11 +141,18 @@ class AudioFormat(Enum):
     @property
     def is_lossless(self) -> bool:
         """
-        Calculates lossless status. 
+        Calculates lossless status.
         A format is lossless if we marked it False OR if it's PCM.
         """
         return not self.is_lossy or self.is_pcm
 
+
+
+# --- FFmpegConfig ---
+@dataclass(frozen=True)
+class FFmpegConfig:
+    ffmpeg_path: str
+    ffprobe_path: str
 
 @dataclass(slots=True)
 class AudioRecord:
@@ -155,7 +166,7 @@ class AudioRecord:
     size_bytes: int
     duration_sec: Optional[float]
 
-    # common tags (what you aggregate on) 
+    # common tags (what you aggregate on)
     year: Optional[str]
     artist: Optional[str]
     album: Optional[str]
@@ -165,9 +176,9 @@ class AudioRecord:
     # status
     readable: bool = field(default=True)
     error: Optional[str] = ""
-    fingerprint: Optional[str] = " _ " # Calculated at creation
+    fingerprint: Optional[str] = " _ "  # Calculated at creation
 
-    # default 
+    # default
     has_embedded_artwork: bool = field(default=False)
 
     @property
@@ -183,8 +194,8 @@ class AudioRecord:
         t = self.title.casefold()
         # if not a or not t:
         #     return None
-        return f"{a}"+"_"+f"{t}"
-    
+        return f"{a}" + "_" + f"{t}"
+
     @property
     def bitrate_kbps(self) -> Optional[float]:
         return int(self.bitrate_bps) / 1000 if self.bitrate_bps else 0
@@ -220,12 +231,13 @@ class AudioRecord:
         bits = self.bits_per_sample
         sr = self.sample_rate_hz
         #  “hi-res” definition: >=24-bit OR >48kHz
-        is_high_res: bool = (bits is not None and bits >=24 ) or \
-                        (sr is not None and sr > 48000)
+        is_high_res: bool = (bits is not None and bits >= 24) or (
+            sr is not None and sr > 48000
+        )
         return is_high_res
 
     def is_cd_lossless(self) -> bool:
-        if  self.audio_format.is_lossy:
+        if self.audio_format.is_lossy:
             return False
         bits = self.bits_per_sample
         sr = self.sample_rate_hz
@@ -282,7 +294,7 @@ class AudioRecord:
         bits = self.bits_per_sample or 0
         if self.is_pcm() and bits > 24:
             return True
-        if self.is_pcm() and self.sample_rate_hz or 0 > 192*1000:
+        if self.is_pcm() and self.sample_rate_hz or 0 > 192 * 1000:
             return True
         return False
 
@@ -290,7 +302,6 @@ class AudioRecord:
 # ---------------------------
 # FolderStats
 # ---------------------------
-
 @dataclass(slots=True)
 class FolderStats:
     # folder:
@@ -313,25 +324,51 @@ class FolderStats:
     missing_title: int = 0
 
     # lossy bitrate bands
-    lossy_band_counts: Counter[str] = field(default_factory=Counter)   # high/standard/low/unknown
-    lossy_band_bytes: defaultdict[str, int] = field(default_factory=partial(defaultdict,int))
+    lossy_band_counts: Counter[str] = field(
+        default_factory=Counter
+    )  # high/standard/low/unknown
+    lossy_band_bytes: defaultdict[str, int] = field(
+        default_factory=partial(defaultdict, int)
+    )
 
-    # 
-    by_readable: defaultdict[str, TypeSummary] = field(default_factory=partial(defaultdict, TypeSummary))
-    by_beloated: defaultdict[str, TypeSummary] = field(default_factory=partial(defaultdict, TypeSummary))
-    by_ext:    defaultdict[str, TypeSummary] = field(default_factory=partial(defaultdict, TypeSummary))
-    by_codec:  defaultdict[str, TypeSummary] = field(default_factory=partial(defaultdict, TypeSummary))
-    by_family: defaultdict[str, TypeSummary] = field(default_factory=partial(defaultdict, TypeSummary))
-    by_tier:   defaultdict[str, TypeSummary] = field(default_factory=partial(defaultdict, TypeSummary))
+    #
+    by_readable: defaultdict[str, TypeSummary] = field(
+        default_factory=partial(defaultdict, TypeSummary)
+    )
+    by_beloated: defaultdict[str, TypeSummary] = field(
+        default_factory=partial(defaultdict, TypeSummary)
+    )
+    by_ext: defaultdict[str, TypeSummary] = field(
+        default_factory=partial(defaultdict, TypeSummary)
+    )
+    by_codec: defaultdict[str, TypeSummary] = field(
+        default_factory=partial(defaultdict, TypeSummary)
+    )
+    by_family: defaultdict[str, TypeSummary] = field(
+        default_factory=partial(defaultdict, TypeSummary)
+    )
+    by_tier: defaultdict[str, TypeSummary] = field(
+        default_factory=partial(defaultdict, TypeSummary)
+    )
 
     # tag aggregation
-    artists: defaultdict[str, TypeSummary] = field(default_factory=partial(defaultdict, TypeSummary))
-    albums: defaultdict[str, TypeSummary] = field(default_factory=partial(defaultdict, TypeSummary))
-    genres: defaultdict[str, TypeSummary] = field(default_factory=partial(defaultdict, TypeSummary))
-    years: defaultdict[str, TypeSummary] = field(default_factory=partial(defaultdict, TypeSummary))
+    artists: defaultdict[str, TypeSummary] = field(
+        default_factory=partial(defaultdict, TypeSummary)
+    )
+    albums: defaultdict[str, TypeSummary] = field(
+        default_factory=partial(defaultdict, TypeSummary)
+    )
+    genres: defaultdict[str, TypeSummary] = field(
+        default_factory=partial(defaultdict, TypeSummary)
+    )
+    years: defaultdict[str, TypeSummary] = field(
+        default_factory=partial(defaultdict, TypeSummary)
+    )
 
     # duplicates by `artist_title`
-    fingerprints: defaultdict[str, TypeSummary] = field(default_factory=partial(defaultdict, TypeSummary))
+    fingerprints: defaultdict[str, TypeSummary] = field(
+        default_factory=partial(defaultdict, TypeSummary)
+    )
 
     def add(self, rec: AudioRecord) -> None:
         """Single source of truth: updates everything consistently."""
@@ -343,37 +380,36 @@ class FolderStats:
         self.total_files += 1
         self.total_bytes += rec.size_bytes
 
-
         # self.bytes_by_ext[rec.audio_format.ext] += rec.size_bytes
         e = self.by_ext[rec.audio_format.ext]
         if e:
-            e.count +=1
-            e.size_bytes +=rec.size_bytes
-        
+            e.count += 1
+            e.size_bytes += rec.size_bytes
+
         c = self.by_codec[rec.audio_format.codec_name]
         if c:
             c.count += 1
-            c.size_bytes +=rec.size_bytes
+            c.size_bytes += rec.size_bytes
 
         f = self.by_family[rec.family()]
         if f:
-            f.count +=1
+            f.count += 1
             f.size_bytes += rec.size_bytes
 
-        qt =self.by_tier[rec.quality_tier()]
+        qt = self.by_tier[rec.quality_tier()]
         if qt:
-            qt.count +=1
-            qt.size_bytes +=rec.size_bytes
+            qt.count += 1
+            qt.size_bytes += rec.size_bytes
 
         # health
-        if  rec.readable:
+        if rec.readable:
             self.readable_files += 1
-            self.by_readable['readable'].count +=1
-            self.by_readable['readable'].size_bytes +=rec.size_bytes
+            self.by_readable["readable"].count += 1
+            self.by_readable["readable"].size_bytes += rec.size_bytes
         else:
-            self.by_readable['unreadble_or_contain_errors'].count += 1
-            self.by_readable['unreadble_or_contain_errors'].size_bytes +=rec.size_bytes
-        
+            self.by_readable["unreadble_or_contain_errors"].count += 1
+            self.by_readable["unreadble_or_contain_errors"].size_bytes += rec.size_bytes
+
         if rec.is_storage_inefficient():
             self.bloated_files += 1
             self.by_beloated["beloated"].count += 1
@@ -382,7 +418,7 @@ class FolderStats:
         # tags -> counters (only count non-empty)
         if rec.artist:
             if rec.artist == AudioFamily.UNKNOWN.value:
-                self.missing_artist 
+                self.missing_artist
             self.artists[rec.artist].count += 1
             self.artists[rec.artist].size_bytes += rec.size_bytes
 
@@ -392,44 +428,63 @@ class FolderStats:
         if rec.genre:
             self.genres[rec.genre].count += 1
             self.genres[rec.genre].size_bytes += rec.size_bytes
-        if rec.year and to_int(rec.year)>1900:
+        if rec.year and to_int(rec.year) > 1900:
             self.years[rec.year].count += 1
             self.years[rec.year].size_bytes += rec.size_bytes
-            
 
         # duplicate fingerprint
         fp = rec.fingerprint
         if fp:
             self.fingerprints[fp].count += 1
             self.fingerprints[fp].size_bytes += rec.size_bytes
-            
+
 
 import json
+
+
 class AudiotownEncoder(json.JSONEncoder):
     def default(self, o):
         # If the object is a Path (PosixPath or WindowsPath), turn it into a string
         if isinstance(o, Path):
             return str(o)
         if isinstance(o, AudioFormat):
-            return {"ext":o.ext, "codec_name":o.codec_name, "encoder":o.encoder, "is_lossy":o.is_lossy,"description":o.description}
+            return {
+                "ext": o.ext,
+                "codec_name": o.codec_name,
+                "encoder": o.encoder,
+                "is_lossy": o.is_lossy,
+                "description": o.description,
+            }
         # Otherwise, let the standard encoder handle it
         return super().default(o)
-    
 
-
-@dataclass(frozen=True) # Frozen makes it immutable/read-only (Production Best Practice)
+@dataclass(frozen=True)  # Frozen makes it immutable/read-only (Production Best Practice)
 class AppConfig:
     import audiotown
-    version: str = audiotown.__version__
-    ffmpeg_path: Path = field(default=Path())
-    
-    # Nested configs are great for organization
-    bitrates: dict[str, str] = field(default_factory=lambda: {
-        "high": BitrateTier.HIGH.value,
-        "medium": BitrateTier.MEDIUM.value,
-        "low": BitrateTier.LOW.value
-    })
-    
-    supported_formats: set[str] = field(
-        default_factory=lambda: AudioFormat.supported_extensions()
-    )
+    ff_config: Optional[FFmpegConfig] = None
+    version: str = field(default=audiotown.__version__)
+    bitrate_tiers : Set[str]= field(default_factory=BitrateTier.supported_bitrates)
+    divs_lvl1: str = field(default=div_blocks(10, "= "))
+    divs_lvl2: str = field(default=div_blocks(5, "- "))
+    supported_extensions: Set[str] = field(default_factory=AudioFormat.supported_extensions)
+
+
+@dataclass
+class AppContext:
+    app_config: AppConfig = field(default_factory=AppConfig)
+    start_time: float = 0
+    run_time: float = 0
+
+    ff_config: Optional[FFmpegConfig] = None
+
+    logger: Optional[SessionLogger] = None
+    @classmethod
+    def get_app_ctx(cls, ctx: click.Context) -> AppContext:
+        # We use cast because Click types ctx.obj as Any
+        return cast(AppContext, ctx.obj)
+    @classmethod
+    def ensure_app_ctx(cls, ctx: click.Context) -> AppContext:
+        if ctx.obj is None:
+            ctx.obj = AppContext(start_time=0.0, run_time=0,
+                                 app_config=AppConfig(), ff_config=None, logger=SessionLogger())
+        return cls.get_app_ctx(ctx)

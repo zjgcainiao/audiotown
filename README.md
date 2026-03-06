@@ -52,7 +52,7 @@ Options:
 Commands:
   check    Verify that FFmpeg and dependencies are correctly installed.
   convert  Convert FLACs in FOLDER to Apple-friendly formats.
-  stats    Stats Dashboard & Optimization tool.
+  stats    Stats Dashboard & Insight tool.
 ```
 
 ## Examples
@@ -61,7 +61,7 @@ Commands:
 2. the output files from `audio convert` are under the subfolder `audiotown_converted/` within `/path/to/album/folder`.
 3. The `/path/to/report/folder` can be `.` or any specified directories.
 4. use `--dry-run` to preview any perceived changes.
-5. The conversion supports: `flac --> alac` or `flac --> aac`
+5. The `convert` takes only `flac` files. It supports: `flac --> alac` or `flac --> aac`
 
 ```zsh
 # 1. show additional help 
@@ -92,10 +92,10 @@ audiotown convert . --codec=aac --bitrate=256k --report-path=. --dry-run
 
   |Option|	Description|	Default|
   |:---|:---|---:|
-  |--codec|	alac or aac. used with `convert`. |alac|
-  |--bitrate|	Bitrate for AAC (128k, 256k, 320k). only useful when `--codec=aac`|	256k|
-  |--dry-run|	Preview conversion without writing files	|False|
-  |--report-path|	generates a full log, including report.json	|disabled|
+  |`--codec`|	alac or aac. used with `convert`. |alac|
+  |`--bitrate`|	Bitrate for AAC (128k, 256k, 320k). only useful when `--codec=aac`|	256k|
+  |`--dry-run`|	Preview conversion without writing files. used with `convert`	|False|
+  |`--report-path`|	generates a full log, including a json. work with both `convert` and `stats`.	|disabled|
 
 2. Examples
 
@@ -111,7 +111,6 @@ audiotown convert . --codec=aac --bitrate=256k --report-path=. --dry-run
     audiotown convert . --codec=alac 
     audiotown convert . --codec=aac --bitrate=256k 
     audiotown convert . --codec=aac --bitrate=128k 
-
     ```
 
    3. It does not make sense to specify `bitrate` for lossless `alac` so `bitrate` will be ignored.

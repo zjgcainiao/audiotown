@@ -7,18 +7,15 @@ import time
 from pathlib import Path
 from wcwidth import wcswidth
 from typing import Optional, NoReturn, Tuple
+from audiotown.utils import  format_section,div_blocks,div_section_line, safe_division
 from audiotown.converter import convert_flac_to_apple_friendly
 from audiotown.stats import get_folder_stats, get_audio_files
-from audiotown.consts import AudioFormat, FFmpegConfig, BitrateTier
+from audiotown.consts import AudioFormat, FFmpegConfig, BitrateTier, AppConfig, AppContext,TypeSummary
 from audiotown.logger import logger
-from audiotown.report import (
-    create_report_for_convert,
-    format_section,
-    div_blocks,
-    div_section_line,
-    generate_report_for_stats,
-)
+from audiotown.report import  create_report_for_convert, generate_report_for_stats
 
+app_config = AppConfig()
+app_context = AppContext(start_time=time.perf_counter(),app_config=app_config,logger=logger)
 
 # --- Boostrap Helpers ---
 def abort(message: str, code: int = 1) -> NoReturn:
@@ -29,12 +26,13 @@ def abort(message: str, code: int = 1) -> NoReturn:
 
 def ensure_ffmpeg() -> Tuple[str, str]:
     """Checks for ffmpeg and offers to install it via 'Homebrew' if missing."""
-    ffmpeg_path: Optional[str] = shutil.which("ffmpeg")
-    ffprobe_path: Optional[str] = shutil.which("ffprobe")
-
+    ffmpeg_path: Optional[str] = None
+    ffprobe_path: Optional[str] 
+    ffmpeg_path = shutil.which("ffmpeg")
+    ffprobe_path =  shutil.which("ffprobe")
     if ffmpeg_path and ffprobe_path:
         return ffmpeg_path, ffprobe_path
-    logger.stream("Required dependency 'ffmpeg' or 'ffprobe' is missing.", err=True)
+    logger.stream("Required dependency 'ffmpeg' or 'ffprobe' is missing.", fg="yellow")
 
     # Check if Homebrew itself is installed first
     if not shutil.which("brew"):
@@ -61,7 +59,9 @@ def ensure_ffmpeg() -> Tuple[str, str]:
     abort("audiotown cannot run without ffmpeg.")
 
 
+# --- main cli --
 @click.group(chain=False, context_settings={"help_option_names": ["-h", "--help"]})
+@click.version_option(version=str(app_config.version), prog_name="audiotown") 
 @click.pass_context
 def cli_runner(ctx):
     """
@@ -74,33 +74,36 @@ def cli_runner(ctx):
     1. Run `audiotown check` to verify your FFmpeg setup.
 
     2. Run `audiotown stats .` to see your library overview.
-
+    
     3. Run `audiotown convert .` to start your conversion.
+
     """
     # 1. SETUP: This runs BEFORE any subcommand
     ctx.ensure_object(dict)
     ctx.obj["start_time"] = time.perf_counter()
-    divs_lvl1 = div_blocks(10, "= ")
-    ctx.obj["divs_lvl1"] = divs_lvl1
-    ctx.obj["divs_lvl2"] = div_blocks(5, "- ")
+    divs_lvl1 = app_config.divs_lvl1
+
     logger.stream(f"{divs_lvl1} Audiotown CLI Starting {divs_lvl1}", bold=True)
     ffpmeg_path, ffprobe_path = ensure_ffmpeg()
-    ff_config: FFmpegConfig = FFmpegConfig(
-        ffmpeg_path=ffpmeg_path, ffprobe_path=ffprobe_path
-    )
-    ctx.obj["ff_config"] = ff_config
+    ff_config: FFmpegConfig = FFmpegConfig(ffpmeg_path, ffprobe_path)
+    app_context.ff_config = ff_config
+
+    # ctx.obj["app_config"]= app_config
+    ctx.obj = app_context
+
 
 
 @cli_runner.result_callback()
 @click.pass_context
-def process_result(ctx, result, **kwargs):
+def process_result(ctx: click.Context, result, **kwargs):
     # 2. TEARDOWN: This runs AFTER the subcommand finishes
-    start_time = ctx.obj.get("start_time")
-    divs_lvl1 = ctx.obj.get("divs_lvl1") or div_blocks(10, "= ")
+    app_context = AppContext.get_app_ctx(ctx)
+    start_time = app_context.start_time 
+    divs_lvl1 = app_context.app_config.divs_lvl1
     if start_time:
-        duration = time.perf_counter() - start_time
-        logger.stream(f"Run time: {duration:.1f} s\n")
-
+        run_time =  time.perf_counter() - start_time
+        app_context.run_time = run_time
+        logger.stream(f"Run time: {run_time:.1f} s\n")
         logger.stream(f"Use '--report-path' flag to export a full set of logs.")
         logger.stream(f"Type 'audiotown' for help.")
         section_line = div_section_line("Ended", 1)
@@ -124,7 +127,7 @@ def process_result(ctx, result, **kwargs):
 @click.option(
     "--bitrate",
     type=click.Choice(BitrateTier.supported_bitrates(), case_sensitive=False),
-    default=None, # Now it's always 256k unless changed
+    default=None,
     # show_default=True,
     help="Target bitrate for AAC. (Ignored for ALAC)",
 )
@@ -139,7 +142,7 @@ def process_result(ctx, result, **kwargs):
     help="A folder where a set of detailed logs will be generated. If no path provided, defaults to the source folder.",
 )
 def convert_cmd(
-    ctx,
+    ctx: click.Context,
     folder: Path,
     codec: str,
     report_path: Optional[Path],
@@ -152,14 +155,16 @@ def convert_cmd(
     # 2. codec is 'aac' -> apply bitrate to ffmpeg command.
     """
     # validation resources: ffmpeg
-    ff_config = ctx.obj.get("ff_config")
-    divs_lvl2 = ctx.obj.get("divs_lvl2")
+    app_context = ctx.obj
+    if not app_context or not app_context.app_config or not app_context.ff_config:
+        abort("Unexpected error.")
+    divs_lvl2 = app_context.app_config.divs_lvl2
     search_formats = [
         AudioFormat.FLAC,
     ]
     search_codecs = [item.codec_name for item in search_formats]
     search_exts = [item.ext for item in search_formats]
-    if not ff_config:
+    if not app_context and not app_context.ff_config.ffmpeg_path:
         logger.stream(
             "Error: ffmpeg/ffprobe not detected on system path.", fg="red", err=True
         )
@@ -188,8 +193,6 @@ def convert_cmd(
     if not target:
         abort("Command exited unexpected. unknown format(s).")
 
-
-
     if not target.is_lossless:
         # We don't need to check 'if bitrate in supported' because 
         # click.Choice already validated this for us!
@@ -199,7 +202,7 @@ def convert_cmd(
     logger.stream(f"  {f"output format":<16} : {codec:<{len(codec)+1}} {s_bitrate}")
     # ONLY show warning if it's lossless AND the user specifically typed --bitrate
     if target.is_lossless and user_provided_bitrate:
-        logger.stream("Ignore bitrate for lossless conversion.", fg="yellow")
+        logger.stream("Ignore bitrate for loss less conversion.", fg="yellow")
     default_folder = str(Path(".").resolve())
     if not folder:
         # logger.stream(message="Missing a directory. you MUST enter one.",fg="red", err=True)
@@ -217,7 +220,7 @@ def convert_cmd(
     logger.stream(f"{total} Found. Processing ...", fg="cyan")
 
     results = {
-        "start_time": str(
+        "start_time":  str(
             datetime.datetime.now().astimezone().strftime("%Y-%m-%dT%H:%M:%S%z")
         ),
         "summary": {"total": 0, "success": 0, "failed": 0},
@@ -239,7 +242,7 @@ def convert_cmd(
                 file_path,
                 target,
                 target_path,
-                ff_config,
+                app_context.ff_config,
                 logger,
                 bitrate,
                 dry_run,
@@ -304,20 +307,20 @@ def convert_cmd(
 )
 @click.argument("folder", type=click.Path(exists=True, path_type=Path))
 def stats_cmd(
-    ctx,
+    ctx: click.Context,
     folder: Path,
     report_path: Path,
 ):
     """Stats Dashboard & Insight tool."""
     # start_perf = time.perf_counter() # More accurate for measuring duration
-    ff_config = ctx.obj.get("ff_config", "")
-    if not ff_config:
+    app_context = ctx.obj
+    if not app_context.ff_config:
         abort(f"Exited unexpected. system depenendecies missing.")
     tops = 5
-    lvl2_blocks = div_blocks(5, "- ")
+    lvl2_blocks = app_context.app_config.divs_lvl2 #div_blocks(5, "- ")
 
     # Helper for sorting: Sort by count (desc) then name (asc)
-    def sort_logic(item):
+    def sort_logic(item:Tuple[str,TypeSummary]):
         return (-item[1].count, item[0].lower())
 
     def display_width(s: str) -> int:
@@ -332,7 +335,7 @@ def stats_cmd(
         return s + (" " * pad)
 
     # logger.stream(f"{lvl2_blocks}Scan Library: {folder.name}{lvl2_blocks}", bold=True)
-    stats = get_folder_stats(folder, ff_config.ffprobe_path)
+    stats = get_folder_stats(folder, app_context.ff_config.ffprobe_path)
 
     # --- 1. File Type Summary (Table-like) ---
     logger.stream(f"{div_section_line("Stats", 2)}\n")
@@ -349,18 +352,20 @@ def stats_cmd(
 
     sorted_artists = sorted(stats.artists.items(), key=sort_logic)
     top_artists = sorted_artists[:tops]
-    top_one_artist, top_one_data = top_artists[0]
-    logger.stream(
-        f"You collect work from {len(stats.artists):,} distinct artists. The top one in your list is {str(top_one_artist)} ({top_one_data.count} songs)."
-    )
+    if top_artists and top_artists[0]:
+        top_one_artist, top_one_data = top_artists[0]
+        logger.stream(
+            f"You collect work from {len(stats.artists):,} distinct artists. The top one in your list is {str(top_one_artist)} ({top_one_data.count} songs)."
+        )
 
     sorted_genres = sorted(stats.genres.items(), key=sort_logic)
     top_genres = sorted_genres[:tops]
-    top_one_genre, top_genre_data = top_genres[0]
+    if top_genres:
+        top_one_genre, top_genre_data = top_genres[0]
 
-    logger.stream(
-        f"Based on the library, you favors this genre the most: {str(top_one_genre)} ({top_genre_data.count:,} songs).\n"
-    )
+        logger.stream(
+            f"Based on the library, you favors this genre the most: {str(top_one_genre)} ({top_genre_data.count:,} songs).\n"
+        )
     s_strs = []
     sorted_families = sorted(
         stats.by_family.items(),
@@ -370,15 +375,15 @@ def stats_cmd(
         total_size_bytes += int(data.size_bytes)
         size_mb = data.size_bytes / 1024**2
         size_str = f"{size_mb/1024:.1f} GB" if size_mb > 1024 else f"{size_mb:.1f} MB"
-        family_str = f"{float(data.count)/stats.total_files*100:>4.0f} % is {family_name.title()}"
+        family_str = f"{safe_division(data.count, stats.total_files*100):>4.0f} % is {family_name.title()}"
         logger.stream(family_str)
     logger.stream(" ")
     readable_str = (
-        f"{float(stats.readable_files)/stats.total_files * 100:>4.0f} % is readable"
+        f"{safe_division(stats.readable_files, stats.total_files * 100) or 0.0 :>4.0f} % is readable"
     )
     logger.stream(f"{readable_str}")
 
-    unreadable_str = f"{float(stats.total_files-stats.readable_files)/stats.total_files * 100:>4.0f} % is unreadable or encounters errors during probes"
+    unreadable_str = f"{safe_division(stats.total_files-stats.readable_files, stats.total_files * 100):>4.0f} % is unreadable or encounters errors during probes"
     logger.stream(f"{unreadable_str}\n")
     if stats.bloated_files and len(stats.by_beloated):
         saved_size_mb = 0.3 * stats.by_beloated["beloated"].size_bytes / 1024**2
@@ -394,7 +399,7 @@ def stats_cmd(
         # f"\nnumber of file considered beloated: {float(stats.bloated_files)}"
         bloated_str = ""
     # logger.stream("\n")
-    if float(stats.readable_files) / stats.total_files * 100 > 0.95:
+    if safe_division(stats.readable_files , stats.total_files * 100) > 0.95:
         comment_str = "Your media library looks healthy. Majority of your records are readable and in good conditions."
         logger.stream(f"{comment_str}\n", bold=True, fg="green")
     else:
