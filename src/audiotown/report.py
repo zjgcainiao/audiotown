@@ -36,6 +36,7 @@ def create_report_for_convert(
         # 4. Save Meta.txt (The context)
         meta_content = [
             f"Software Name: Audiotown",
+            f"Version: f{audiotown.__version__}",
             f"Dry Run: {results['summary']['is_dry_run']}",
             # f"Run Time: {results['run_time']}",
             f"User: {Path.home().name}",

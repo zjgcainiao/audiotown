@@ -365,6 +365,10 @@ class FolderStats:
         default_factory=partial(defaultdict, TypeSummary)
     )
 
+    by_has_embedded_artwork: defaultdict[str, TypeSummary] = field(
+        default_factory=partial(defaultdict, TypeSummary)
+    )
+
     # duplicates by `artist_title`
     fingerprints: defaultdict[str, TypeSummary] = field(
         default_factory=partial(defaultdict, TypeSummary)
@@ -412,9 +416,6 @@ class FolderStats:
                 self.missing_artist +=1
             else:
                 self._bump(self.artists, rec.artist, size)
-            # self.artists[rec.artist].count += 1
-            # self.artists[rec.artist].size_bytes += rec.size_bytes
-        
 
         # if rec.album:
         if not rec.album:
@@ -423,24 +424,19 @@ class FolderStats:
             self._bump(self.albums, rec.album, size)
         if rec.genre:
             self._bump(self.genres, rec.genre, size)
-            # self.genres[rec.genre].count += 1
-            # self.genres[rec.genre].size_bytes += rec.size_bytes
+
         if rec.year and to_int(rec.year) > 1900:
             self._bump(self.years, rec.year, size)
-            # self.years[rec.year].count += 1
-            # self.years[rec.year].size_bytes += rec.size_bytes
+        
+        if rec.has_embedded_artwork:
+            self._bump(self.by_has_embedded_artwork, "has_embedded_artwork", size)
 
         # duplicate fingerprint
         if rec.fingerprint:
             self._bump(self.fingerprints, rec.fingerprint, size)
-        # fp = rec.fingerprint
-        # if fp:
-        #     # self.fingerprints[fp].count += 1
-        #     # self.fingerprints[fp].size_bytes += rec.size_bytes
 
 
 import json
-
 
 class AudiotownEncoder(json.JSONEncoder):
     def default(self, o):

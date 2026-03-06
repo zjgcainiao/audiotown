@@ -364,9 +364,9 @@ def stats_cmd(
         top_one_genre, top_genre_data = top_genres[0]
 
         logger.stream(
-            f"Based on the library, you favors this genre the most: {str(top_one_genre)} ({top_genre_data.count:,} songs).\n"
+            f"Based on the library, you favor this genre the most: {str(top_one_genre)} ({top_genre_data.count:,} songs).\n"
         )
-    s_strs = []
+
     sorted_families = sorted(
         stats.by_family.items(),
         key=sort_logic,  # x[0] is the key, x[1] is the TypeSummary object
@@ -398,12 +398,20 @@ def stats_cmd(
     else:
         # f"\nnumber of file considered bloated: {float(stats.bloated_files)}"
         bloated_str = ""
+        # embedded artwork
+    if stats.by_has_embedded_artwork:
+        cnt_embedded_artwork = stats.by_has_embedded_artwork["has_embedded_artwork"].count
+        embedded_artwork_pc = (
+            f"{safe_division(100 * cnt_embedded_artwork, stats.total_files ):>4.0f} % contains thumbnail or artwork."
+        )
+        logger.stream(f"{embedded_artwork_pc}\n", bold=True)
     # logger.stream("\n")
-    if safe_division(stats.readable_files , stats.total_files * 100) > 0.95:
+    if safe_division(100 * stats.readable_files , stats.total_files )  or 0 > 0.95:
         comment_str = "Your media library looks healthy. Majority of your records are readable and in good conditions."
         logger.stream(f"{comment_str}\n", bold=True, fg="green")
     else:
         comment_str = ""
+
 
     # --- 1. Top Extensions (by file count) ---
 
