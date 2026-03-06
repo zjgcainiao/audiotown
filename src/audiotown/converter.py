@@ -1,21 +1,20 @@
 import subprocess
 import json
+from typing import Tuple
 from pathlib import Path
 from audiotown.logger import SessionLogger
 from audiotown.logger import logger
-from audiotown.consts import AudioFormat, FFmpegConfig,bitrate_map
+from audiotown.consts import AudioFormat, FFmpegConfig, BitrateTier
 from audiotown.utils import find_external_cover
 from audiotown.stats import get_stream_info, probe_file
-from typing import Tuple
-
 
 def convert_flac_to_apple_friendly(
         file_path: Path,
         target: AudioFormat,
         target_path: Path,
-        ff_config:FFmpegConfig,
+        ff_config: FFmpegConfig,
         logger: SessionLogger,
-        bit_rate:str = bitrate_map["medium"],
+        bit_rate:str ="",
         dry_run: bool = False,
         # verbose: bool = False
         ) -> Tuple[bool, str]:
@@ -29,13 +28,14 @@ def convert_flac_to_apple_friendly(
         output_path = target_path
 
     ffmpeg_path, ffprobe_path = ff_config.ffmpeg_path, ff_config.ffprobe_path
-
-    # 1. INSPECT: Does it have embedded artwork?
+    if not ffmpeg_path:
+        return False, "error. missing dependencies"
+    
+    # 1. INSPECT: Does it have embedded artwork
     audio_record = probe_file(file_path, ffprobe_path)
     if not audio_record:
         return False, ""
     has_embedded_artwork = audio_record.has_embedded_artwork
-    
     # 2. CHECK: Is there a local cover.jpg?
     has_external_artwork = False
     external_artwork_path = None
@@ -69,8 +69,8 @@ def convert_flac_to_apple_friendly(
     
     if target.encoder == "aac":
         # for aac encoder. default to medium quality
-        default_quality = "medium"
-        selected_bitrate = bit_rate if bit_rate in list(bitrate_map.values()) else bitrate_map.get(default_quality)  or "256k"
+        # default_quality = "medium"
+        selected_bitrate = bit_rate if bit_rate in BitrateTier.supported_bitrates() else BitrateTier.MEDIUM.value
         cmd.extend(["-b:a", selected_bitrate])
     cmd.extend([
         "-c:v", str(art_copy_method),
@@ -112,15 +112,13 @@ def convert_flac_to_apple_friendly(
         except Exception:
             quality_str = "Metadata Error"
             tags = {}
-        # Standard Concise Output
-        # logger.log(f"[DRY-RUN] {file_path.name} ({quality_str}) \t -> \t {output_path.name}")
         
         # Optional: Additional Info only if verbose is triggered
-        if verbose:
-            title = tags.get("title", "Unknown")
-            artist = tags.get("artist", "Unknown")
-            album = tags.get("album", "Unknown")
-            # logger.log(f"Tags: {artist} - {title} - {album}")
+        # if verbose:
+        #     title = tags.get("title", "Unknown")
+        #     artist = tags.get("artist", "Unknown")
+        #     album = tags.get("album", "Unknown")
+        #     # logger.log(f"Tags: {artist} - {title} - {album}")
         
         return True, ""
 
@@ -135,12 +133,18 @@ def convert_flac_to_apple_friendly(
         stdout, stderr = process.communicate()
 
         if process.returncode != 0:
-            # logger.stream(f"  FFMPEG ERROR on {file_path.name}: {stderr}", fg="red")
-            # click.secho(f"  FAILED: {file_path.name}\n  Error: {stderr}", fg="red")
-            return False, f"Unexpected error: {stderr}"
+            return False, f"FFmpeg Error (Code {process.returncode}): {stderr.strip()}"
         
-        # logger.stream(f"SUCCESS: {file_path.name}", fg="green")
-        return True, ""
+        # SUCCESS: Log the stderr because that contains the bitrate/codec info
+        if stderr:
+            return True, f"FFmpeg Output: {stderr.strip()}"
     except subprocess.CalledProcessError as e:
         # logger.stream(f"CRITICAL: {str(e)}", fg="red")
         return False, f"CRITICAL: {str(e)}"
+    except FileNotFoundError:
+        return False, "CRITICAL: ffmpeg binary not found. Check your AppConfig/PATH."
+    except Exception as e:
+        return False, f"CRITICAL: System error: {str(e)}"
+    
+    
+    return True, ""

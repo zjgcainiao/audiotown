@@ -9,7 +9,7 @@ from wcwidth import wcswidth
 from typing import Optional, NoReturn, Tuple
 from audiotown.converter import convert_flac_to_apple_friendly
 from audiotown.stats import get_folder_stats, get_audio_files
-from audiotown.consts import AudioFormat, FFmpegConfig,bitrate_map
+from audiotown.consts import AudioFormat, FFmpegConfig, BitrateTier
 from audiotown.logger import logger
 from audiotown.report import (
     create_report_for_convert,
@@ -123,8 +123,10 @@ def process_result(ctx, result, **kwargs):
 )
 @click.option(
     "--bitrate",
-    default="256k",
-    help="Bitrate for AAC (e.g., 128k, 256k, 320k). Ignored for ALAC.",
+    type=click.Choice(BitrateTier.supported_bitrates(), case_sensitive=False),
+    default=None, # Now it's always 256k unless changed
+    # show_default=True,
+    help="Target bitrate for AAC. (Ignored for ALAC)",
 )
 @click.option("--dry-run", is_flag=True, help="Preview the result. Default: False")
 # @click.option("--verbose", is_flag=True, help="Verbose output")
@@ -132,7 +134,7 @@ def process_result(ctx, result, **kwargs):
     "--report-path",
     "report_path",
     type=click.Path(file_okay=False, dir_okay=True, writable=True, path_type=Path),
-    flag_value=".", 
+    flag_value=".",
     default=None,
     help="A folder where a set of detailed logs will be generated. If no path provided, defaults to the source folder.",
 )
@@ -177,19 +179,26 @@ def convert_cmd(
     else:
         target = AudioFormat.ALAC
     target = AudioFormat.from_codec(codec) if codec else AudioFormat.ALAC
+    # Detect if the user EXPLICITLY provided a bitrate
+    user_provided_bitrate = bitrate is not None
+    
+    # 2. Assign the actual working bitrate (Fallback to MEDIUM if None)
+    effective_bitrate = bitrate if user_provided_bitrate else BitrateTier.MEDIUM.value
     s_bitrate = ""
     if not target:
         abort("Command exited unexpected. unknown format(s).")
-    if target.is_lossless and bitrate:
-        logger.stream(f"Ignore bitrate for lossless conversion(s).", fg="yellow")
-    if not target.is_lossless and bitrate:
-        if not bitrate in list(bitrate_map.values()):
-            bitrate=bitrate_map["medium"]
-            logger.stream(f"! Uncceptable bitrate. default to {bitrate}",fg="yellow")
-        s_bitrate = f"(bitrate_bkps: {str(bitrate)})"
-    logger.stream(f" source format(s): {search_codecs} ")
 
-    logger.stream(f" destin format: {codec} {s_bitrate}")
+    # ONLY show warning if it's lossless AND the user specifically typed --bitrate
+    if target.is_lossless and user_provided_bitrate:
+        logger.stream("Ignore bitrate for lossless conversion(s).", fg="yellow")
+
+    if not target.is_lossless:
+        # We don't need to check 'if bitrate in supported' because 
+        # click.Choice already validated this for us!
+        s_bitrate = f"(bitrate_kbps: {effective_bitrate})"
+
+    logger.stream(f" {f"source format(s)":<16} : {" ".join(search_codecs):<8} ")
+    logger.stream(f" {f"destin format":<16} : {codec:<8} {s_bitrate}")
 
     default_folder = str(Path(".").resolve())
     if not folder:
@@ -227,7 +236,13 @@ def convert_cmd(
             target_path = Path(output_base / relative_path).with_suffix(target.ext)
             target_path.parent.mkdir(parents=True, exist_ok=True)  # Create subfolders!
             success, error_message = convert_flac_to_apple_friendly(
-                file_path, target, target_path, ff_config, logger, bitrate, dry_run, 
+                file_path,
+                target,
+                target_path,
+                ff_config,
+                logger,
+                bitrate,
+                dry_run,
             )
 
             # Record the result
@@ -240,7 +255,8 @@ def convert_cmd(
             else:
                 results["summary"]["failed"] += 1
 
-            # Add this to make the report.json useful!
+            logger.log(f"{error_message}")
+
             results["details"].append(
                 {
                     "source": str(file_path),
@@ -264,14 +280,14 @@ def convert_cmd(
         base_dir = report_path.resolve()
         # 1. Create a timestamped folder name
         timestamp = datetime.datetime.now().astimezone().strftime("%Y%m%d_%H%M%S")
-        bundle_dir = base_dir / f"audiotown_convert"
+        final_dir = base_dir / f"audiotown_convert"
 
         logger.stream(
-            f"report dir: {str(Path(bundle_dir).resolve())}",
+            f"report dir: {str(Path(final_dir).resolve())}",
         )
         # 2. Create and populate
-        bundle_dir.mkdir(parents=True, exist_ok=True)
-        create_report_for_convert(bundle_dir, results, logger)
+        final_dir.mkdir(parents=True, exist_ok=True)
+        rp_success = create_report_for_convert(final_dir, results, logger)
 
 
 # ----------------
@@ -279,14 +295,18 @@ def convert_cmd(
 # ----------------
 @cli_runner.command(name="stats")
 @click.pass_context
-@click.option('--report-path', is_flag=False, flag_value=".", 
-              type=click.Path(path_type=Path),
-              help="Generate logs/JSON. Defaults to current directory if no path given.")
+@click.option(
+    "--report-path",
+    is_flag=False,
+    flag_value=".",
+    type=click.Path(path_type=Path),
+    help="Generate logs/JSON. Defaults to current directory if no path given.",
+)
 @click.argument("folder", type=click.Path(exists=True, path_type=Path))
 def stats_cmd(
     ctx,
     folder: Path,
-    report_path:Path,
+    report_path: Path,
 ):
     """Stats Dashboard & Insight tool."""
     # start_perf = time.perf_counter() # More accurate for measuring duration
@@ -313,26 +333,34 @@ def stats_cmd(
 
     # logger.stream(f"{lvl2_blocks}Scan Library: {folder.name}{lvl2_blocks}", bold=True)
     stats = get_folder_stats(folder, ff_config.ffprobe_path)
-    
+
     # --- 1. File Type Summary (Table-like) ---
     logger.stream(f"{div_section_line("Stats", 2)}\n")
     total_size_bytes = 0
     total_gb = stats.total_bytes / (1024**3)
-    hour_format = f"{stats.total_duration_sec/3600/24:,.1f} days" if stats.total_duration_sec/3600 > 200 else f"{stats.total_duration_sec/3600:,.1f} hours"
+    hour_format = (
+        f"{stats.total_duration_sec/3600/24:,.1f} days"
+        if stats.total_duration_sec / 3600 > 200
+        else f"{stats.total_duration_sec/3600:,.1f} hours"
+    )
     logger.stream(
-        f"Your library can play {hour_format} in one row, contains {stats.total_files:,} files, and takes up {total_gb:.1f} GB."
+        f"Your library can play {hour_format} in one row, contains {stats.total_files:,} files, and takes up {total_gb:.1f} GB.",
     )
 
     sorted_artists = sorted(stats.artists.items(), key=sort_logic)
     top_artists = sorted_artists[:tops]
     top_one_artist, top_one_data = top_artists[0]
-    logger.stream(f"You collect work from {len(stats.artists)-1:,} distinct artists. The top one in your list is {str(top_one_artist)} ({top_one_data.count} songs).")
-    
+    logger.stream(
+        f"You collect work from {len(stats.artists):,} distinct artists. The top one in your list is {str(top_one_artist)} ({top_one_data.count} songs)."
+    )
+
     sorted_genres = sorted(stats.genres.items(), key=sort_logic)
     top_genres = sorted_genres[:tops]
     top_one_genre, top_genre_data = top_genres[0]
 
-    logger.stream(f"Based on the library, you favors this genre the most: {str(top_one_genre)} ({top_genre_data.count:,} songs).\n")
+    logger.stream(
+        f"Based on the library, you favors this genre the most: {str(top_one_genre)} ({top_genre_data.count:,} songs).\n"
+    )
     s_strs = []
     sorted_families = sorted(
         stats.by_family.items(),
@@ -342,19 +370,15 @@ def stats_cmd(
         total_size_bytes += int(data.size_bytes)
         size_mb = data.size_bytes / 1024**2
         size_str = f"{size_mb/1024:.1f} GB" if size_mb > 1024 else f"{size_mb:.1f} MB"
-        family_str = (
-            f"{float(data.count)/stats.total_files*100:>4.0f} % is {family_name.title()}"
-        )
+        family_str = f"{float(data.count)/stats.total_files*100:>4.0f} % is {family_name.title()}"
         logger.stream(family_str)
     logger.stream(" ")
     readable_str = (
         f"{float(stats.readable_files)/stats.total_files * 100:>4.0f} % is readable"
     )
     logger.stream(f"{readable_str}")
-    
-    unreadable_str = (
-        f"{float(stats.total_files-stats.readable_files)/stats.total_files * 100:>4.0f} % is unreadable or encounters errors during probes"
-    )   
+
+    unreadable_str = f"{float(stats.total_files-stats.readable_files)/stats.total_files * 100:>4.0f} % is unreadable or encounters errors during probes"
     logger.stream(f"{unreadable_str}\n")
     if stats.bloated_files and len(stats.by_beloated):
         saved_size_mb = 0.3 * stats.by_beloated["beloated"].size_bytes / 1024**2
@@ -363,39 +387,43 @@ def stats_cmd(
             if saved_size_mb > 1024
             else f"{saved_size_mb:.1f} MB"
         )
-        
+
         bloated_str = f"We've found {int(stats.bloated_files)} files (potential .wav, .pcm files) that can be converted to flac without damaging your hearing experience. It may save {saved_size_str}."
         logger.stream(bloated_str)
     else:
         # f"\nnumber of file considered beloated: {float(stats.bloated_files)}"
-        bloated_str = "" 
+        bloated_str = ""
     # logger.stream("\n")
-    if float(stats.readable_files)/stats.total_files * 100 > 0.95:
+    if float(stats.readable_files) / stats.total_files * 100 > 0.95:
         comment_str = "Your media library looks healthy. Majority of your records are readable and in good conditions."
-        logger.stream(f"{comment_str}\n",bold=True,fg="green")
+        logger.stream(f"{comment_str}\n", bold=True, fg="green")
     else:
         comment_str = ""
 
     # --- 1. Top Extensions (by file count) ---
-    
-    logger.stream(f"Top {min(tops,len(stats.by_ext))} Extensions (by file count):", fg="cyan")
+
+    logger.stream(
+        f"Top {min(tops,len(stats.by_ext))} Extensions (by file count):", fg="cyan"
+    )
 
     sorted_exts = sorted(stats.by_ext.items(), key=sort_logic)
     top_exts = sorted_exts[:tops]
     sub_total_name = "Total # of Extensions"
     label_width = (
-            max(
-                max((display_width(ext) for ext, _ in top_exts ), default=0),
-                len(sub_total_name),
-            )
-            + 2
+        max(
+            max((display_width(ext) for ext, _ in top_exts), default=0),
+            len(sub_total_name),
+        )
+        + 2
     )
     for ext, data in top_exts:
 
         total_size_bytes += int(data.size_bytes)
         size_mb = data.size_bytes / 1024**2
         size_str = f"{size_mb/1024:.1f} GB" if size_mb > 1024 else f"{size_mb:.1f} MB"
-        logger.stream(f"  {ljust_display(ext,label_width)} : {data.count:>7,} files ({size_str:>8})")
+        logger.stream(
+            f"  {ljust_display(ext,label_width)} : {data.count:>7,} files ({size_str:>8})"
+        )
 
     # Total for File Distribution
     total_gb = stats.total_bytes / (1024**3)
@@ -445,7 +473,7 @@ def stats_cmd(
         )
         # print(f"max ablum length: {label_width}")
         for album, data in top_albums:
-            count=data.count
+            count = data.count
             logger.stream(f"  {ljust_display(album, label_width)}: {count:>7,}")
         logger.stream(
             f"  {ljust_display('Total # of Albums', label_width)}: {len(stats.albums):>7,}\n",
@@ -459,12 +487,13 @@ def stats_cmd(
             f"Top {min(tops,len(stats.genres))} Genres (by file count):", fg="cyan"
         )
 
-        sub_total_name = 'Total # of Genres'
+        sub_total_name = "Total # of Genres"
         label_width = (
             max(
                 max((display_width(genre) for genre, _ in top_genres), default=0),
-                len(sub_total_name)
-                )+ 2
+                len(sub_total_name),
+            )
+            + 2
         )
         for genre, data in sorted_genres[:tops]:
             count = data.count
@@ -475,19 +504,22 @@ def stats_cmd(
         )
     if len(stats.by_tier):
         logger.stream(f"Fine Grained Quality Tier (by file count):", fg="cyan")
-        sorted_quality_tiers = sorted(
-            stats.by_tier.items(),
-            key=sort_logic 
-        )
+        sorted_quality_tiers = sorted(stats.by_tier.items(), key=sort_logic)
         sub_total_name = "Total # of Quality Tiers"
         label_width = (
             max(
-                max((display_width(quality_tier) for quality_tier, _ in sorted_quality_tiers[:tops]), default=0),
+                max(
+                    (
+                        display_width(quality_tier)
+                        for quality_tier, _ in sorted_quality_tiers[:tops]
+                    ),
+                    default=0,
+                ),
                 len(sub_total_name),
             )
             + 2
         )
-        
+
         for quality_tier, data in sorted_quality_tiers:
             total_size_bytes += int(data.size_bytes)
             size_mb = data.size_bytes / 1024**2

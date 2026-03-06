@@ -11,8 +11,36 @@ from audiotown.utils import to_int
 bitrate_map = {
     "high": "320k",
     "medium": "256k",
-    "low": "128k"
+    "low": "128k",
 }
+
+class BitrateTier(str, Enum):
+    HIGH = "320k"
+    MEDIUM = "256k"
+    LOW = "128k"
+
+    @classmethod
+    def get_value(cls, key: str) -> str:
+        # Allows you to look up "high" and get "320k" safely
+        return cls[key.upper()].value
+    @classmethod
+    def from_str(cls, label: str):
+        """Safely find a tier by string, case-insensitive."""
+        try:
+            return cls[label.upper()]
+        except (KeyError, AttributeError):
+            return None # Or return cls.MEDIUM as a safe fallback
+    @classmethod
+    def supported_bitrates(cls) -> List[str]:
+        # Allows you to look up "high" and get "320k" safely
+        
+        list = [member.value for member in cls]
+        return list 
+
+@dataclass(slots=True)
+class TypeSummary:
+    count: int = 0
+    size_bytes: int = 0
 
 @dataclass(frozen=True, slots=True)
 class AudioStream:
@@ -52,7 +80,6 @@ class QualityTier(str, Enum):
 
 class AudioFormat(Enum):
     # Member = (extension, codec_name, encoder, is_lossy, description)
-    
     # --- LOSSLESS ---
     FLAC   = (".flac", "flac",      "flac",       False, "Free Lossless Audio Codec")
     ALAC   = (".m4a",  "alac",      "alac",       False, "Apple Lossless")
@@ -66,6 +93,7 @@ class AudioFormat(Enum):
     OPUS   = (".opus", "opus",       "libopus",    True,  "Opus Interactive Audio")
     VORBIS = (".ogg",  "vorbis",     "libvorbis",  True,  "Ogg Vorbis")
     WMA    = (".wma",  "wmav2",      "wmav2",      True,  "Windows Media Audio")
+   
     # requires 4 arguments
     def __init__(self, ext: str, codec_name: str, encoder: str, is_lossy: bool, description: str):
         self.ext = ext
@@ -165,8 +193,6 @@ class AudioRecord:
     def sample_rate_khz(self) -> Optional[float]:
         return int(self.sample_rate_hz) / 1000 if self.sample_rate_hz else 0
 
-# ---------- classification helpers ----------
-    
     def family(self) -> AudioFamily:
         if not self.readable:
             return AudioFamily.UNKNOWN
@@ -199,7 +225,7 @@ class AudioRecord:
         return is_high_res
 
     def is_cd_lossless(self) -> bool:
-        if not self.audio_format.is_lossy:
+        if  self.audio_format.is_lossy:
             return False
         bits = self.bits_per_sample
         sr = self.sample_rate_hz
@@ -262,13 +288,8 @@ class AudioRecord:
 
 
 # ---------------------------
-# Summary structures
+# FolderStats
 # ---------------------------
-@dataclass(slots=True)
-class TypeSummary:
-    count: int = 0
-    size_bytes: int = 0
-
 
 @dataclass(slots=True)
 class FolderStats:
@@ -393,3 +414,22 @@ class AudiotownEncoder(json.JSONEncoder):
             return {"ext":o.ext, "codec_name":o.codec_name, "encoder":o.encoder, "is_lossy":o.is_lossy,"description":o.description}
         # Otherwise, let the standard encoder handle it
         return super().default(o)
+    
+
+
+@dataclass(frozen=True) # Frozen makes it immutable/read-only (Production Best Practice)
+class AppConfig:
+    import audiotown
+    version: str = audiotown.__version__
+    ffmpeg_path: Path = field(default=Path())
+    
+    # Nested configs are great for organization
+    bitrates: dict[str, str] = field(default_factory=lambda: {
+        "high": BitrateTier.HIGH.value,
+        "medium": BitrateTier.MEDIUM.value,
+        "low": BitrateTier.LOW.value
+    })
+    
+    supported_formats: set[str] = field(
+        default_factory=lambda: AudioFormat.supported_extensions()
+    )
