@@ -390,66 +390,53 @@ class FolderStats:
         self._bump(self.by_codec, rec.audio_format.codec_name, size)
         self._bump(self.by_family, rec.family(), size)
         self._bump(self.by_tier, rec.quality_tier(), size)
-        # e = self.by_ext[rec.audio_format.ext]
-        # if e:
-        #     e.count += 1
-        #     e.size_bytes += rec.size_bytes
 
-        # c = self.by_codec[rec.audio_format.codec_name]
-        # if c:
-        #     c.count += 1
-        #     c.size_bytes += rec.size_bytes
-
-        # f = self.by_family[rec.family()]
-        # if f:
-        #     f.count += 1
-        #     f.size_bytes += rec.size_bytes
-
-        # qt = self.by_tier[rec.quality_tier()]
-        # if qt:
-        #     qt.count += 1
-        #     qt.size_bytes += rec.size_bytes
-
-        # health
         if rec.readable:
             self.readable_files += 1
             self._bump(self.by_readable, "readable", size)
-            # self.by_readable["readable"].count += 1
-            # self.by_readable["readable"].size_bytes += rec.size_bytes
+
         else:
             self._bump(self.by_readable, "unreadable_or_errors", size)
-            # self.by_readable["unreadable_or_contain_errors"].count += 1
-            # self.by_readable["unreadable_or_contain_errors"].size_bytes += rec.size_bytes
+
 
         if rec.is_storage_inefficient():
             self.bloated_files += 1
             self._bump(self.by_bloated, "bloated", size)
 
-            # self.by_belated["bloated"].count += 1
-            # self.by_belated["bloated"].size_bytes += rec.size_bytes
 
         # tags -> counters (only count non-empty)
+        if not rec.title:
+            self.missing_title += 1
         if rec.artist:
             if rec.artist == AudioFamily.UNKNOWN.value:
                 self.missing_artist +=1
-            self.artists[rec.artist].count += 1
-            self.artists[rec.artist].size_bytes += rec.size_bytes
+            else:
+                self._bump(self.artists, rec.artist, size)
+            # self.artists[rec.artist].count += 1
+            # self.artists[rec.artist].size_bytes += rec.size_bytes
+        
 
-        if rec.album:
-            self.albums[rec.album].count += 1
-            self.albums[rec.album].size_bytes += rec.size_bytes
+        # if rec.album:
+        if not rec.album:
+            self.missing_album += 1
+        else:
+            self._bump(self.albums, rec.album, size)
         if rec.genre:
-            self.genres[rec.genre].count += 1
-            self.genres[rec.genre].size_bytes += rec.size_bytes
+            self._bump(self.genres, rec.genre, size)
+            # self.genres[rec.genre].count += 1
+            # self.genres[rec.genre].size_bytes += rec.size_bytes
         if rec.year and to_int(rec.year) > 1900:
-            self.years[rec.year].count += 1
-            self.years[rec.year].size_bytes += rec.size_bytes
+            self._bump(self.years, rec.year, size)
+            # self.years[rec.year].count += 1
+            # self.years[rec.year].size_bytes += rec.size_bytes
 
         # duplicate fingerprint
-        fp = rec.fingerprint
-        if fp:
-            self.fingerprints[fp].count += 1
-            self.fingerprints[fp].size_bytes += rec.size_bytes
+        if rec.fingerprint:
+            self._bump(self.fingerprints, rec.fingerprint, size)
+        # fp = rec.fingerprint
+        # if fp:
+        #     # self.fingerprints[fp].count += 1
+        #     # self.fingerprints[fp].size_bytes += rec.size_bytes
 
 
 import json

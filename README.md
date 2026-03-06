@@ -23,7 +23,7 @@
    5. `convert` has a babit that searchs `cover.jpg` or `library.jpg` in the existing folder strucutre. if the source file does not contain an artwork, the command attempts to find such file and add it into output files whenever possible.
 
 
-## Installation
+# Installation
 1. Ensure I have [FFmpeg](https://ffmpeg.org/download.html) installed on the system. It is the powerhouse that does the conversion and other heavy work like probing `ffprobe`. I will need it installed and working. Mac users can installed it via [homebrew](https://formulae.brew.sh/formula/ffmpeg):`brew install ffmpeg`.
 2. Python >3.10+. 
 3. Requires `click` and `wcwidth` libaries.

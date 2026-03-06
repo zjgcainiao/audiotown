@@ -375,11 +375,11 @@ def stats_cmd(
         total_size_bytes += int(data.size_bytes)
         size_mb = data.size_bytes / 1024**2
         size_str = f"{size_mb/1024:.1f} GB" if size_mb > 1024 else f"{size_mb:.1f} MB"
-        family_str = f"{safe_division(data.count, stats.total_files*100):>4.0f} % is {family_name.title()}"
+        family_str = f"{safe_division(100*data.count, stats.total_files):>4.0f} % is {family_name.title()}"
         logger.stream(family_str)
     logger.stream(" ")
     readable_str = (
-        f"{safe_division(stats.readable_files, stats.total_files * 100) or 0.0 :>4.0f} % is readable"
+        f"{safe_division(100 * stats.readable_files, stats.total_files ):>4.0f} % is readable"
     )
     logger.stream(f"{readable_str}")
 
