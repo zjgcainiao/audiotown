@@ -6,16 +6,34 @@ import datetime
 import time
 from pathlib import Path
 from wcwidth import wcswidth
-from typing import Optional, NoReturn, Tuple
-from audiotown.utils import  format_section,div_blocks,div_section_line, safe_division
+from typing import Optional, NoReturn, Tuple, Union
+from audiotown.utils import (
+    format_section,
+    div_blocks,
+    div_section_line,
+    safe_division,
+    to_int,
+    size_string
+)
 from audiotown.converter import convert_flac_to_apple_friendly
 from audiotown.stats import get_folder_stats, get_audio_files
-from audiotown.consts import AudioFormat, FFmpegConfig, BitrateTier, AppConfig, AppContext,TypeSummary
+from audiotown.consts import (
+    AudioFormat,
+    FFmpegConfig,
+    BitrateTier,
+    AppConfig,
+    AppContext,
+    TypeSummary,
+    DuplicateGroup
+)
 from audiotown.logger import logger
-from audiotown.report import  create_report_for_convert, generate_report_for_stats
+from audiotown.report import create_report_for_convert, generate_report_for_stats
 
 app_config = AppConfig()
-app_context = AppContext(start_time=time.perf_counter(),app_config=app_config,logger=logger)
+app_context = AppContext(
+    start_time=time.perf_counter(), app_config=app_config, logger=logger
+)
+
 
 # --- Boostrap Helpers ---
 def abort(message: str, code: int = 1) -> NoReturn:
@@ -27,9 +45,9 @@ def abort(message: str, code: int = 1) -> NoReturn:
 def ensure_ffmpeg() -> Tuple[str, str]:
     """Checks for ffmpeg and offers to install it via 'Homebrew' if missing."""
     ffmpeg_path: Optional[str] = None
-    ffprobe_path: Optional[str] 
+    ffprobe_path: Optional[str]
     ffmpeg_path = shutil.which("ffmpeg")
-    ffprobe_path =  shutil.which("ffprobe")
+    ffprobe_path = shutil.which("ffprobe")
     if ffmpeg_path and ffprobe_path:
         return ffmpeg_path, ffprobe_path
     logger.stream("Required dependency 'ffmpeg' or 'ffprobe' is missing.", fg="yellow")
@@ -61,7 +79,7 @@ def ensure_ffmpeg() -> Tuple[str, str]:
 
 # --- main cli --
 @click.group(chain=False, context_settings={"help_option_names": ["-h", "--help"]})
-@click.version_option(version=str(app_config.version), prog_name="audiotown") 
+@click.version_option(version=str(app_config.version), prog_name="audiotown")
 @click.pass_context
 def cli_runner(ctx):
     """
@@ -74,7 +92,7 @@ def cli_runner(ctx):
     1. Run `audiotown check` to verify your FFmpeg setup.
 
     2. Run `audiotown stats .` to see your library overview.
-    
+
     3. Run `audiotown convert .` to start your conversion.
 
     """
@@ -92,16 +110,15 @@ def cli_runner(ctx):
     ctx.obj = app_context
 
 
-
 @cli_runner.result_callback()
 @click.pass_context
 def process_result(ctx: click.Context, result, **kwargs):
     # 2. TEARDOWN: This runs AFTER the subcommand finishes
     app_context = AppContext.get_app_ctx(ctx)
-    start_time = app_context.start_time 
+    start_time = app_context.start_time
     divs_lvl1 = app_context.app_config.divs_lvl1
     if start_time:
-        run_time =  time.perf_counter() - start_time
+        run_time = time.perf_counter() - start_time
         app_context.run_time = run_time
         logger.stream(f"Run time: {run_time:.1f} s\n")
         logger.stream(f"Use '--report-path' flag to export a full set of logs.")
@@ -186,7 +203,7 @@ def convert_cmd(
     target = AudioFormat.from_codec(codec) if codec else AudioFormat.ALAC
     # Detect if the user EXPLICITLY provided a bitrate
     user_provided_bitrate = bitrate is not None
-    
+
     # 2. Assign the actual working bitrate (Fallback to MEDIUM if None)
     effective_bitrate = bitrate if user_provided_bitrate else BitrateTier.MEDIUM.value
     s_bitrate = ""
@@ -194,11 +211,13 @@ def convert_cmd(
         abort("Command exited unexpected. unknown format(s).")
 
     if not target.is_lossless:
-        # We don't need to check 'if bitrate in supported' because 
+        # We don't need to check 'if bitrate in supported' because
         # click.Choice already validated this for us!
         s_bitrate = f"(bitrate_kbps: {effective_bitrate})"
 
-    logger.stream(f"  {f"source format(s)":<16} : {" ".join(search_codecs):<{len(search_codecs)}} ")
+    logger.stream(
+        f"  {f"source format(s)":<16} : {" ".join(search_codecs):<{len(search_codecs)}} "
+    )
     logger.stream(f"  {f"output format":<16} : {codec:<{len(codec)+1}} {s_bitrate}")
     # ONLY show warning if it's lossless AND the user specifically typed --bitrate
     if target.is_lossless and user_provided_bitrate:
@@ -220,7 +239,7 @@ def convert_cmd(
     logger.stream(f"{total} Found. Processing ...", fg="cyan")
 
     results = {
-        "start_time":  str(
+        "start_time": str(
             datetime.datetime.now().astimezone().strftime("%Y-%m-%dT%H:%M:%S%z")
         ),
         "summary": {"total": 0, "success": 0, "failed": 0},
@@ -305,11 +324,19 @@ def convert_cmd(
     type=click.Path(path_type=Path),
     help="Generate logs/JSON. Defaults to current directory if no path given.",
 )
+@click.option(
+    "--find-duplicate",
+    is_flag=True,
+    flag_value=True,
+    type=bool,
+    help=" to enable duplicate file searching, etc.",
+)
 @click.argument("folder", type=click.Path(exists=True, path_type=Path))
 def stats_cmd(
     ctx: click.Context,
     folder: Path,
     report_path: Path,
+    find_duplicate: bool, 
 ):
     """Stats Dashboard & Insight tool."""
     # start_perf = time.perf_counter() # More accurate for measuring duration
@@ -317,10 +344,10 @@ def stats_cmd(
     if not app_context.ff_config:
         abort(f"Exited unexpected. system depenendecies missing.")
     tops = 5
-    lvl2_blocks = app_context.app_config.divs_lvl2 #div_blocks(5, "- ")
+    lvl2_blocks = app_context.app_config.divs_lvl2  # div_blocks(5, "- ")
 
     # Helper for sorting: Sort by count (desc) then name (asc)
-    def sort_logic(item:Tuple[str,TypeSummary]):
+    def sort_logic(item: Tuple[str, Union[TypeSummary, DuplicateGroup]]):
         return (-item[1].count, item[0].lower())
 
     def display_width(s: str) -> int:
@@ -340,11 +367,11 @@ def stats_cmd(
     # --- 1. File Type Summary (Table-like) ---
     logger.stream(f"{div_section_line("Stats", 2)}\n")
     total_size_bytes = 0
-    total_gb = stats.total_bytes / (1024**3)
+    total_gb = stats.total_bytes / app_config.GIGA_BYTES
     hour_format = (
-        f"{stats.total_duration_sec/3600/24:,.1f} days"
-        if stats.total_duration_sec / 3600 > 200
-        else f"{stats.total_duration_sec/3600:,.1f} hours"
+        f"{stats.total_duration_sec/app_config.SECS_PER_DAY:,.1f} days"
+        if stats.total_duration_sec / app_config.SECS_PER_HOUR > 200
+        else f"{stats.total_duration_sec/ app_config.SECS_PER_HOUR:,.1f} hours"
     )
     logger.stream(
         f"Your library can play {hour_format} in one row, contains {stats.total_files:,} files, and takes up {total_gb:.1f} GB.",
@@ -378,20 +405,18 @@ def stats_cmd(
         family_str = f"{safe_division(100*data.count, stats.total_files):>4.0f} % is {family_name.title()}"
         logger.stream(family_str)
     logger.stream(" ")
-    readable_str = (
-        f"{safe_division(100 * stats.readable_files, stats.total_files ):>4.0f} % is readable"
-    )
+    readable_str = f"{safe_division(100 * stats.readable_files, stats.total_files ):>4.0f} % is readable"
     logger.stream(f"{readable_str}")
 
-    unreadable_str = f"{safe_division(stats.total_files-stats.readable_files, stats.total_files * 100):>4.0f} % is unreadable or encounters errors during probes"
+    unreadable_str = f"{safe_division(stats.total_files-stats.readable_files, stats.total_files * 100):>4.0f} % is unreadable or encounters errors"
     logger.stream(f"{unreadable_str}\n")
 
     # embedded artwork
     if stats.by_has_embedded_artwork:
-        cnt_embedded_artwork = stats.by_has_embedded_artwork["has_embedded_artwork"].count
-        embedded_artwork_pc = (
-            f"{safe_division(100 * cnt_embedded_artwork, stats.total_files ):>4.0f} % contains embedded thumbnail or artwork."
-        )
+        cnt_embedded_artwork = stats.by_has_embedded_artwork[
+            "has_embedded_artwork"
+        ].count
+        embedded_artwork_pc = f"{safe_division(100 * cnt_embedded_artwork, stats.total_files ):>4.0f} % contains embedded thumbnail or artwork."
         logger.stream(f"{embedded_artwork_pc}\n", bold=True)
     if stats.bloated_files and len(stats.by_bloated):
         saved_size_mb = 0.3 * stats.by_bloated["bloated"].size_bytes / 1024**2
@@ -408,12 +433,11 @@ def stats_cmd(
         bloated_str = ""
 
     # logger.stream("\n")
-    if safe_division(100 * stats.readable_files , stats.total_files )  or 0 > 0.95:
+    if safe_division(100 * stats.readable_files, stats.total_files) or 0 > 0.95:
         comment_str = "Your media library looks healthy. Majority of your records are readable and in good conditions."
         logger.stream(f"{comment_str}\n", bold=True, fg="green")
     else:
         comment_str = ""
-
 
     # --- 1. Top Extensions (by file count) ---
 
@@ -429,7 +453,7 @@ def stats_cmd(
             max((display_width(ext) for ext, _ in top_exts), default=0),
             len(sub_total_name),
         )
-        + 2
+        + 1
     )
     for ext, data in top_exts:
 
@@ -460,7 +484,7 @@ def stats_cmd(
                 max((display_width(artist) for artist, _ in top_artists), default=9),
                 len("Total # of Artists"),
             )
-            + 2
+            + 1
         )
         for artist, data in sorted_artists[:tops]:
             count = data.count
@@ -484,7 +508,7 @@ def stats_cmd(
                 max((display_width(album) for album, _ in top_albums), default=0),
                 len("Total # of Albums"),
             )
-            + 2
+            + 1
         )
         # print(f"max ablum length: {label_width}")
         for album, data in top_albums:
@@ -499,7 +523,7 @@ def stats_cmd(
 
     if stats.genres:
         logger.stream(
-            f"Top {min(tops,len(stats.genres))} Genres (by file count):", fg="cyan"
+            f"Top {min(app_config.TOPS,len(stats.genres))} Genres (by file count):", fg="cyan"
         )
 
         sub_total_name = "Total # of Genres"
@@ -532,12 +556,12 @@ def stats_cmd(
                 ),
                 len(sub_total_name),
             )
-            + 2
+            + 1
         )
 
         for quality_tier, data in sorted_quality_tiers:
             total_size_bytes += int(data.size_bytes)
-            size_mb = data.size_bytes / 1024**2
+            size_mb = data.size_bytes / app_config.MEGA_BYTES
             size_str = (
                 f"{size_mb/1024:.1f} GB" if size_mb > 1024 else f"{size_mb:.1f} MB"
             )
@@ -549,6 +573,79 @@ def stats_cmd(
             f"  {ljust_display(sub_total_name, label_width)} : {len(stats.by_tier):>7,}\n",
             dim=True,
         )
+
+    if find_duplicate and len(stats.fingerprints):
+
+        sub_total_name = "total # of dupl grps"
+        waste_size_string = "potential waste size to save"
+        sorted_fps = sorted(stats.fingerprints.items(),key=sort_logic)
+
+        label_width = (
+            # max(
+                max(
+                    (
+                        display_width(duplicate_key)
+                        for duplicate_key, _ in sorted_fps[:min(tops,len(sorted_fps))]
+                    ),
+                    default=0,
+                )
+                # len(sub_total_name),
+                # len(waste_size_string),
+            # )
+        )
+        fn_str_width = 40
+        # logger.stream(f'{min(app_config.TOPS,len(sorted_fps))}')
+        total_waste_bytes = 0
+        for _, data in sorted_fps:
+            total_waste_bytes += data.waste_size
+        if sorted_fps:
+            sorted_fps = sorted_fps[:min(app_config.TOPS,len(sorted_fps))]
+            logger.stream(f"Top {min(app_config.TOPS,len(sorted_fps))} Possible Duplicate Groups (by file count):", fg="cyan")
+            for dp_key, data in sorted_fps:
+                recs = data.records
+                if len(recs) > 1:
+                    sorted_recs = sorted(
+                        data.records,
+                        key=lambda x: (
+                            not x.audio_format.is_lossless,
+                            -(to_int(x.bitrate_bps)),
+                            dp_key,
+                        ),
+                    )
+                else:
+                    sorted_recs = recs
+                selected = min (app_config.TOPS,len(sorted_recs))
+                sorted_recs = sorted_recs[:selected]
+                size_mb = data.size_bytes / app_config.MEGA_BYTES
+                size_str = (
+                    f"{size_mb/1024:.1f} GB" if size_mb > 1024 else f"{size_mb:.1f} MB"
+                )
+                filen_str = ""
+                if sorted_recs:
+                    strs = [("'"+ rec.file_path.name + "'"or "") for rec in sorted_recs if rec]
+                    filen_str = ", ".join(strs)
+
+                if not filen_str:
+                    filen_str = filen_str 
+                logger.stream(
+                    f"  {ljust_display(dp_key.title(),label_width)} : {data.count:>6,} ({size_str:>8}) "
+                )
+                logger.stream(
+                    f"      |-->  {ljust_display(filen_str,fn_str_width) + ", etc."}", dim=True,
+                )
+                # logger.stream(
+                #     f"      |--  {ljust_display(waste_size_string ,label_width)} :  {size_string(data.waste_size):>5}",
+                #     dim=True
+                # )
+
+            # logger.stream(
+            #     f"  {ljust_display(sub_total_name, label_width)} : {len(stats.fingerprints.items()):>6,}\n",
+            #     dim=True,
+            # )
+            # logger.stream(
+            #     f"  {ljust_display('total size to save ', label_width)} : {(total_waste_bytes):>6,}\n",
+            #     dim=True,
+            # )
 
     if report_path:
         # If the user just typed '--report-path', this will be Path(".")

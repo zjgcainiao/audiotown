@@ -1,31 +1,31 @@
 
 **AudioTown** is a lightweight audio file oriented package that intends to do two things:
-- Explain this media folder to me. 
-- It converts the lossless files (`.flac`) in your collection to more apple friendly format, `.m4a`. Supports both  high-quality _ALAC (Lossless)_ and _AAC (Lossy)_  as [codec](https://ffmpeg.org/ffmpeg-codecs.html). When it converts, it tries preserving metadata, including album artwork from source files.
+- Explain this media folder in the sense that interests me. 
+- It converts lossless files (`.flac`) in your collection to more apple friendly format, `.m4a`. Supports both high-quality _ALAC (Lossless)_ and _AAC (Lossy)_ as [codec](https://ffmpeg.org/ffmpeg-codecs.html). When it converts, it tries preserving metadata, including album artwork from source files.
 
 # What to expect
 1. `audiotown` contains three commands: `check`, `stats` and `convert`. This package requires `ffmepg` installed in the system. 
    1. To run them, type `auditown check` or `audio stats` or `audio convert`.
    2. Type `audiotown check` to run `check`. 
    3. The command checks if `ffmpeg` is installed.
-2. `stats` acts as an executive assisant for audio media management. Personal media library are often messy. This command starts by searching the `folder` recursively and laser focus ONLY on audio files (filtered by suffix). It then prints out to the terminal a summary report about how it finds: 
-   1. numbers of songs by formats, by encoding types,
+2. `stats` acts as an executive assisant for audio media management. Personal media library are often messy. This command starts by searching the `folder` recursively and laser focus ONLY on audio files (filtered by file suffix). It then prints out to the terminal a summary report based on what it finds: 
+   1. numbers of songs by formats, by encoder types,
    2. storage usage details, 
-   3. what top artists, genre, album are to me ,
+   3. what top artists, genres, albums are to me ,
    4. are they lossless or lossy, and 
    5. detect potential unreadable or corrupt files. 
-3. `stats` can export scanned records into a JSON file via `--report-path` flag.
-4. `convert`. It converts all `.flac` files in a folder into lossless (`alac`) or lossy (`aac`) versions. a apple lossless encoded `.m4a` file can be recognized in Apple eco system but not usually for `.flac` files. 
+3. `stats` can export scanned records into a JSON via `--report-path` flag. Default value is `.` (current directory).
+4. `convert`. It converts all `.flac` files in a folder into lossless (`alac`) or lossy (`aac`) versions. An apple lossless encoded `.m4a` file can be recognized in Apple eco system but not usually for `.flac` files. 
    1. `--report-path` is available in `convert` too. To run it `audiocheck convert /path/to/flacs --encoder=alac --report-path=.`. The converted will be exported to a new folder `audiotown_export` in the same folder `path/to/flacs`. 
-   2. `convert` also support `--dry-run` as a tool to preview changes made in a conversion.
-   3. `convert` search files recursively so I can specify a high-level `folder` like `Media` or `myMediaHub`. Try with one ablum folder first.
-   4. `converts` support `--bitrate` when the `--encoder=aac` is specified. the default bitrate kbps is `256k`. `128k` and `320k` are the other valid inputs.
-   5. `convert` has a babit that searchs `cover.jpg` or `library.jpg` in the existing folder strucutre. if the source file does not contain an artwork, the command attempts to find such file and add it into output files whenever possible.
+   2. `convert` also supports `--dry-run` as a tool to preview changes made in a conversion.
+   3. `convert` searches files recursively so I can specify a high-level `folder` like `Media` or `myMediaHub`. Try with one ablum folder first.
+   4. `convert` supports `--bitrate` when the `--encoder=aac` is specified. the default bitrate kbps is `256k`. `128k` and `320k` are the other valid inputs.
+   5. `convert` by default tries to add artwork into files. It searches for `cover.jpg` or `library.jpg` at the root of the folder. if the source file does not contain an artwork, the command attempts to find such file and embed it into the output whenever possible.
 
 
 # Installation
-1. Ensure I have [FFmpeg](https://ffmpeg.org/download.html) installed on the system. It is the powerhouse that does the conversion and other heavy work like probing `ffprobe`. I will need it installed and working. Mac users can installed it via [homebrew](https://formulae.brew.sh/formula/ffmpeg):`brew install ffmpeg`.
-2. Python >3.10+. 
+1. Ensure I have [FFmpeg](https://ffmpeg.org/download.html) installed on the system. It is the powerhouse that does the conversion and other heavy work like probing `ffprobe`. I will need it installed and working. MacOS users can install it via [homebrew](https://formulae.brew.sh/formula/ffmpeg): `brew install ffmpeg`.
+2. Python >=3.10. 
 3. Requires `click` and `wcwidth` libaries.
 
 ```zsh
@@ -79,6 +79,9 @@ audiotown stats .
 audiotown stats  /path/to/media/folder
 audiotown stats  /path/to/media/folder --report-path=.
 
+# enable duplicating searching
+audiotown stats  /path/to/media/folder --find-duplicate --report-path=. 
+
 # 4. convert all flac files  to alac (default) or aac based formats. logging is controlled by `--report-path`
 # . means current directory
 audiotown convert . --report-path=.
@@ -95,10 +98,10 @@ audiotown convert . --codec=aac --bitrate=256k --report-path=. --dry-run
   |`--codec`|	alac or aac. used with `convert`. |alac|
   |`--bitrate`|	Bitrate for AAC (128k, 256k, 320k). only useful when `--codec=aac`|	256k|
   |`--dry-run`|	Preview conversion without writing files. used with `convert`	|False|
+  |`--find-duplicate`| finds potential duplicate files by parallel comparisions via `arist`, `title` and `file_name`.	|disabled|
   |`--report-path`|	generates a full log, including a json. work with both `convert` and `stats`.	|disabled|
 
-2. Examples
-
+1. Examples
    1. Run a preview to see what would be converted:
 
     ```zsh
@@ -118,6 +121,12 @@ audiotown convert . --codec=aac --bitrate=256k --report-path=. --dry-run
     ```zsh
     cd /my/media/folder
     audiotown convert . --codec=alac --bitrate=128k 
+    ```
+   4. find duplicates. the command looks at the metadata like aritst, title, file size and file name. it tries to find a unique key to create duplicate groups/sets.
+
+    ```zsh
+    cd /my/media/folder
+    audiotown stats . --find-pulicate
     ```
 
 # LICENSE

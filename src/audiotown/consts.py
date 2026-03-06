@@ -1,5 +1,8 @@
 from __future__ import annotations
 import click
+import re
+import json
+import unicodedata
 from enum import Enum
 from pathlib import Path
 from dataclasses import dataclass, field
@@ -8,7 +11,6 @@ from collections import Counter, defaultdict
 from functools import partial
 from audiotown.utils import to_int, div_blocks
 from audiotown.logger import SessionLogger
-
 
 
 class BitrateTier(str, Enum):
@@ -42,6 +44,11 @@ class TypeSummary:
     count: int = 0
     size_bytes: int = 0
 
+@dataclass(slots=True)
+class Type2Summary:
+    count: int = 0
+    size_bytes: int = 0
+    files: List[Path] = field(default_factory=list)
 
 @dataclass(frozen=True, slots=True)
 class AudioStream:
@@ -159,12 +166,6 @@ class AudioRecord:
     file_path: Path
     # common technical fields
     audio_format: AudioFormat  # includes ext, and codec
-    bitrate_bps: Optional[int]
-    sample_rate_hz: Optional[int]
-    bits_per_sample: Optional[int]
-    channels: Optional[int]
-    size_bytes: int
-    duration_sec: Optional[float]
 
     # common tags (what you aggregate on)
     year: Optional[str]
@@ -172,6 +173,16 @@ class AudioRecord:
     album: Optional[str]
     title: Optional[str]
     genre: Optional[str]
+    track: Optional[str]
+
+
+    bitrate_bps: Optional[int] = 0
+    sample_rate_hz: Optional[int] = 0
+    bits_per_sample: Optional[int] = 0
+    channels: Optional[int] = 0
+    size_bytes: int = 0
+    duration_sec: Optional[float] = 0
+
 
     # status
     readable: bool = field(default=True)
@@ -298,6 +309,28 @@ class AudioRecord:
             return True
         return False
 
+@dataclass(slots=True)
+class DuplicateGroup:
+    records: list[AudioRecord] = field(default_factory=list)
+    key: str = ""
+    count: int = 0
+    size_bytes: int = 0
+
+
+    @property
+    def waste_size(self) -> int:
+        if len(self.records) < 2:
+            return 0
+            
+        # 1. Sort by Quality (Lossless first, then High Bitrate)
+        # This ensures the 'Best' file is at index 0
+        sorted_recs = sorted(
+            self.records, 
+            key=lambda x: (not x.audio_format.is_lossless, -to_int(x.bitrate_bps))
+        )
+        
+        # 2. Sum up every file EXCEPT the first one (the keeper)
+        return sum(f.size_bytes for f in sorted_recs[1:])
 
 # ---------------------------
 # FolderStats
@@ -305,8 +338,6 @@ class AudioRecord:
 @dataclass(slots=True)
 class FolderStats:
     # folder:
-    # folder: Path
-
     # records
     records: List[AudioRecord] = field(default_factory=list)
 
@@ -317,8 +348,6 @@ class FolderStats:
     bloated_files: int = 0
     readable_files: int = 0
 
-    # per-ext summary
-    # types: Dict[str, TypeSummary] = field(default_factory=dict)
     missing_artist: int = 0
     missing_album: int = 0
     missing_title: int = 0
@@ -370,13 +399,10 @@ class FolderStats:
     )
 
     # duplicates by `artist_title`
-    fingerprints: defaultdict[str, TypeSummary] = field(
-        default_factory=partial(defaultdict, TypeSummary)
+    fingerprints: defaultdict[str, DuplicateGroup] = field(
+        default_factory=partial(defaultdict, DuplicateGroup)
     )
-    def _bump(self, table: defaultdict[str, TypeSummary], key: str, size: int) -> None:
-        ts = table[key]
-        ts.count += 1
-        ts.size_bytes += size
+
 
     def add(self, rec: AudioRecord) -> None:
         """Single source of truth: updates everything consistently."""
@@ -389,11 +415,13 @@ class FolderStats:
         self.total_files += 1
         self.total_bytes += rec.size_bytes
 
-        # self.bytes_by_ext[rec.audio_format.ext] += rec.size_bytes
-        self._bump(self.by_ext, rec.audio_format.ext, size)
-        self._bump(self.by_codec, rec.audio_format.codec_name, size)
-        self._bump(self.by_family, rec.family(), size)
-        self._bump(self.by_tier, rec.quality_tier(), size)
+        for table, key in (
+            (self.by_ext, rec.audio_format.ext),
+            (self.by_codec, rec.audio_format.codec_name),
+            (self.by_family, rec.family()),
+            (self.by_tier, rec.quality_tier()),
+        ):
+            self._bump(table, key, size)
 
         if rec.readable:
             self.readable_files += 1
@@ -406,7 +434,6 @@ class FolderStats:
         if rec.is_storage_inefficient():
             self.bloated_files += 1
             self._bump(self.by_bloated, "bloated", size)
-
 
         # tags -> counters (only count non-empty)
         if not rec.title:
@@ -432,11 +459,78 @@ class FolderStats:
             self._bump(self.by_has_embedded_artwork, "has_embedded_artwork", size)
 
         # duplicate fingerprint
-        if rec.fingerprint:
-            self._bump(self.fingerprints, rec.fingerprint, size)
+        fp = rec.fingerprint
+        if fp:
+            meta_key = self._normalize_key(rec.fingerprint) if rec.fingerprint else None
+            
+            # Key B: The Filename (Stem only, ignore extension)
+            # e.g., "01. Hotel California.mp3" -> "01 hotel california"
+            name_key = self._normalize_key(rec.file_path.stem)
+
+            # We "Bucket" it under both. If the metadata is missing, name_key saves us.
+            # If the filename is "Track 01" but metadata is correct, meta_key saves us.
+            primary_key = meta_key if meta_key and len(meta_key) > 3 else name_key
+            # refined_fp = self._normalize_key(fp)
+            self._bump2(self.fingerprints, primary_key, size,rec)
+
+    def _bump(self, table: defaultdict[str, TypeSummary], key: str, size: int) -> None:
+        ts = table[key]
+        ts.count += 1
+        ts.size_bytes += size
+
+    def _bump2(self, table: defaultdict[str, DuplicateGroup], key: str, size: int, audio_record:AudioRecord) -> None:
+        dg = table[key]
+        dg.key = key
+        dg.count += 1
+        dg.size_bytes += size
+        dg.records.append(audio_record)
+        # recs = table[key].records
+        # if len(recs) > 1:
+        #     sorted_recs = sorted(
+        #         recs, 
+        #         key=lambda x: (not x.audio_format.is_lossless, -(x.bitrate_bps or 0))
+        #     )
+        #     table[key].records = sorted_recs
 
 
-import json
+    def _normalize_key(self, s: str) -> str:
+        _ws = re.compile(r"\s+")
+        _keep = re.compile(r"[^\w\s]", flags=re.UNICODE)  # remove punctuation; keep letters/digits/underscore
+        s = unicodedata.normalize("NFKC", s)
+        s = s.casefold()
+        s = s.replace("_", " ")
+        s = _keep.sub(" ", s)      # turn punctuation into spaces
+        s = _ws.sub(" ", s).strip()
+        return s
+
+    def find_duplicates(self, audio_records: List[AudioRecord] = list()) -> List[DuplicateGroup]:
+        # We use a set of keys to avoid double-counting the same file
+        buckets: defaultdict[str, list[AudioRecord]] = defaultdict(list)
+        if not audio_records:
+            audio_records = self.records
+        for rec in audio_records:
+            # Key A: The Metadata Fingerprint (Artist - Title)
+            meta_key = self._normalize_key(rec.fingerprint) if rec.fingerprint else None
+            
+            # Key B: The Filename (Stem only, ignore extension)
+            # e.g., "01. Hotel California.mp3" -> "01 hotel california"
+            name_key = self._normalize_key(rec.file_path.stem)
+
+            # We "Bucket" it under both. If the metadata is missing, name_key saves us.
+            # If the filename is "Track 01" but metadata is correct, meta_key saves us.
+            primary_key = meta_key if meta_key and len(meta_key) > 3 else name_key
+            buckets[primary_key].append(rec)
+        # 2. Filter out buckets with only 1 file (those aren't duplicates)
+        results: List[DuplicateGroup] = []
+        for key, records in buckets.items():
+            if len(records) > 1:
+                sorted_recs = sorted(
+                    records, 
+                    key=lambda x: (not x.audio_format.is_lossless, -(x.bitrate_bps or 0))
+                )
+                results.append(DuplicateGroup(key=key, records=sorted_recs))
+        return results
+
 
 class AudiotownEncoder(json.JSONEncoder):
     def default(self, o):
@@ -463,17 +557,23 @@ class AppConfig:
     divs_lvl1: str = field(default=div_blocks(10, "= "))
     divs_lvl2: str = field(default=div_blocks(5, "- "))
     supported_extensions: Set[str] = field(default_factory=AudioFormat.supported_extensions)
-
+    READABLE:str = "readable"
+    UNREADABLE:str = "unreadable_or_errors"
+    BLOATED:str = "bloated"
+    TOPS: int = 5 # show top 5 artists, 
+    MEGA_BYTES: int = 1024**2
+    GIGA_BYTES: int = 1024**3
+    SECS_PER_DAY: int = 24 * 60 * 60
+    SECS_PER_HOUR: int = 60 * 60
 
 @dataclass
 class AppContext:
     app_config: AppConfig = field(default_factory=AppConfig)
     start_time: float = 0
     run_time: float = 0
-
     ff_config: Optional[FFmpegConfig] = None
-
     logger: Optional[SessionLogger] = None
+
     @classmethod
     def get_app_ctx(cls, ctx: click.Context) -> AppContext:
         # We use cast because Click types ctx.obj as Any

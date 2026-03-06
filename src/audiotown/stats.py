@@ -10,11 +10,10 @@ from audiotown.utils import sanitize_metadata
 from audiotown.consts import (
     AudioRecord,
     AudioFormat,
-
+    AppConfig,
     FolderStats,
     AudioStream,
 )
-
 
 def get_stream_info(
     file_path: Path, ffprobe_path: str, stream_level: int = 2
@@ -33,7 +32,7 @@ def get_stream_info(
         "-v",
         "quiet",
         "-show_entries",
-        "stream=sample_rate,bits_per_raw_sample,bits_per_raw_sample,bit_rate, channels:format=duration:format_tags=title,artist,album,date,genre,",
+        "stream=sample_rate,bits_per_raw_sample,bits_per_raw_sample,bit_rate, channels:format=duration:format_tags=title,artist,album,date,genre,track,",
         "-of",
         "json",
         "-i",
@@ -103,7 +102,7 @@ def probe_file(file_path: Path, ffprobe_path: str) -> Optional[AudioRecord]:
 
         # -- internal helper function
         def _cleanse_fields(
-            data: dict, keys: list = ["artist", "album", "title", "genre", "year"]
+            data: dict, keys: list = ["artist", "album", "title", "genre", "year","track_name"]
         ):
             result = []
             for key in keys:
@@ -120,7 +119,6 @@ def probe_file(file_path: Path, ffprobe_path: str) -> Optional[AudioRecord]:
         raw_bits = int(
             stream.get("bits_per_raw_sample", 0)
             or stream.get("bits_per_sample", 0)
-            or 0
         )
         channels = int(stream.get("channels", 0))
 
@@ -136,14 +134,14 @@ def probe_file(file_path: Path, ffprobe_path: str) -> Optional[AudioRecord]:
         codec_type = stream.get("codec_type", "")  # audio or video
         codec_name = stream.get("codec_name", "")  # actual codec
         duration = float(
-            stream.get("duration", 0.00) or format_data.get("duration", 0.00) or 0.00
+            stream.get("duration", 0.00) or format_data.get("duration", 0.00) 
         )
-        bitrate_bps = stream.get("bit_rate", 0) or format_data.get("bit_rate", 0) or 0
-        artist_name, album_name, title_name, genre_name, year_name = _cleanse_fields(
-            format_tags, ["artist", "album", "title", "genre", "date"]
+        bitrate_bps = stream.get("bit_rate", 0) or format_data.get("bit_rate", 0) 
+        artist_name, album_name, title_name, genre_name, year_name,track_name = _cleanse_fields(
+            format_tags, ["artist", "album", "title", "genre", "date", "track_name"]
         )
 
-        fingerprint = str(artist_name.casefold()+ "_" + title_name.casefold())
+        fingerprint = str(artist_name.casefold() + "_" + title_name.casefold())
 
         audio_format = AudioFormat.from_codec(codec_name)
         if not audio_format:
@@ -155,7 +153,7 @@ def probe_file(file_path: Path, ffprobe_path: str) -> Optional[AudioRecord]:
         record = AudioRecord(
             file_path=file_path,
             audio_format=audio_format,
-            bitrate_bps=bitrate_bps,
+            bitrate_bps=bitrate_bps or 0,
             sample_rate_hz=sample_rate,
             bits_per_sample=raw_bits,
             channels=channels,
@@ -170,11 +168,12 @@ def probe_file(file_path: Path, ffprobe_path: str) -> Optional[AudioRecord]:
             fingerprint=fingerprint,
             error="",
             has_embedded_artwork=has_embedded_artwork,
+            track=track_name,
         )
-        # print(f'record: {record}')
+
         return record
     except Exception as e:
-        try: 
+        try:
             audio_format = AudioFormat.from_suffix(file_path.suffix.casefold())
             if not audio_format:
                 return None
@@ -187,7 +186,7 @@ def probe_file(file_path: Path, ffprobe_path: str) -> Optional[AudioRecord]:
             sample_rate_hz=0,
             bits_per_sample=0,
             duration_sec=0,
-            size_bytes=file_path.stat().st_size, # get it via `file.stat()`
+            size_bytes=file_path.stat().st_size,  # get it via `file.stat()`
             channels=0,
             year="0",
             album="",
@@ -195,12 +194,11 @@ def probe_file(file_path: Path, ffprobe_path: str) -> Optional[AudioRecord]:
             genre="",
             title="",
             readable=False,
-            fingerprint=str(" " +"_" +" "),
+            fingerprint=str(" " + "_" + " "),
             error=str(e),
-
+            track= " ",
         )
-        return unreadable_rec 
-
+        return unreadable_rec
 
 def get_audio_files(
     directory: Path, formats: Optional[Iterable[AudioFormat]] = None
@@ -230,28 +228,30 @@ def get_audio_files(
         if file.suffix.lower() in target_suffixes:
             yield file
 
-
 # max_workers = min(32, (os.cpu_count() or 4) * 2)
 def get_folder_stats(
     folder: Path,
     ffprobe_path: str,
-    max_workers: int = min(32, (os.cpu_count() or 4) * 2) or 8,
+    max_workers: int = min(32, (os.cpu_count() or 4) * 2),
 ):
     """Gathers technical and metadata stats for a folder."""
 
     stats = FolderStats()
 
-    if not folder:
-        return None
+    # if not folder:
+    #     return None
 
     # Define our 'Music & Audiobook' whitelist
-    SUPPORTED = AudioFormat.supported_extensions()
+    SUPPORTED = AppConfig().supported_extensions
     supported_str = ", ".join(SUPPORTED)
     # 1. Collect paths (Fast)
-    all_files = [f for f in folder.rglob("*") if f.suffix.lower() in SUPPORTED]
-
+    # all_files = [f for f in folder.rglob("*") if f.suffix.lower() in SUPPORTED]
+    
+    all_files = list(get_audio_files(folder))
     #  using {max_workers} threads
-    logger.stream(f"Scanning files as one of the ({supported_str}) in {folder.resolve().stem}...")
+    logger.stream(
+        f"Scanning files ending in one of the ({supported_str}) in {folder.resolve().stem}..."
+    )
     logger.stream(f"{len(all_files):,} Found.")
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:

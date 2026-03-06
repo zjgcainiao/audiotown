@@ -2,18 +2,26 @@ from pathlib import Path
 from typing import Optional
 from audiotown.logger import logger
 import unicodedata
-from typing import Optional,Union
+from typing import Optional, Union
 
 
-def safe_division(n1:Union[int, float], n2:Union[int, float])-> Optional[float]:
+def size_string(size: int) -> str:
+
+    size_mb = size / 1024**2
+    size_str = f"{size_mb/1024:.1f} GB" if size_mb > 1024 else f"{size_mb:.1f} MB"
+    return size_str
+
+
+def safe_division(n1: Union[int, float], n2: Union[int, float]) -> Optional[float]:
     try:
-        result = float(n1/n2)
+        result = float(n1 / n2)
         return result
     except ZeroDivisionError:
         return float(0.0)
     except Exception:
         return None
-    
+
+
 def to_int(val, default=0) -> int:
     """Safely converts a value to integer, returning default on failure."""
     try:
@@ -21,6 +29,7 @@ def to_int(val, default=0) -> int:
         return int(str(val).strip())
     except (ValueError, TypeError):
         return default
+
 
 def find_external_cover(folder_path: Path) -> Optional[Path]:
     valid_names = {"cover", "folder", "front", "album"}
@@ -71,6 +80,7 @@ def sanitize_metadata(text: str) -> str:
     # 3. Cleanup Whitespace
     return text
 
+
 # -- create blocks, sections lines for terminal output --
 def div_blocks(number: int, divider: str = "= ") -> str:
     """Generates a repeating block of characters."""
@@ -110,4 +120,3 @@ def format_section(title: str, data: dict) -> str:
         lines.append(f" {k:<{width}}: {v}")
     lines.append(f"{blocks} End of {title} {blocks}")
     return "\n".join(lines)
-
