@@ -18,3 +18,4 @@ dist/
 
 # pypi release script and others
 scripts/
+.github/
