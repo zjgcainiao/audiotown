@@ -188,18 +188,18 @@ def convert_cmd(
     if not target:
         abort("Command exited unexpected. unknown format(s).")
 
-    # ONLY show warning if it's lossless AND the user specifically typed --bitrate
-    if target.is_lossless and user_provided_bitrate:
-        logger.stream("Ignore bitrate for lossless conversion(s).", fg="yellow")
+
 
     if not target.is_lossless:
         # We don't need to check 'if bitrate in supported' because 
         # click.Choice already validated this for us!
         s_bitrate = f"(bitrate_kbps: {effective_bitrate})"
 
-    logger.stream(f" {f"source format(s)":<16} : {" ".join(search_codecs):<8} ")
-    logger.stream(f" {f"destin format":<16} : {codec:<8} {s_bitrate}")
-
+    logger.stream(f"  {f"source format(s)":<16} : {" ".join(search_codecs):<{len(search_codecs)}} ")
+    logger.stream(f"  {f"output format":<16} : {codec:<{len(codec)+1}} {s_bitrate}")
+    # ONLY show warning if it's lossless AND the user specifically typed --bitrate
+    if target.is_lossless and user_provided_bitrate:
+        logger.stream("Ignore bitrate for lossless conversion.", fg="yellow")
     default_folder = str(Path(".").resolve())
     if not folder:
         # logger.stream(message="Missing a directory. you MUST enter one.",fg="red", err=True)
@@ -214,7 +214,7 @@ def convert_cmd(
         logger.stream("No file found.", fg="yellow")
         return
 
-    logger.stream(f"{total} Found. Starting conversion...", fg="cyan")
+    logger.stream(f"{total} Found. Processing ...", fg="cyan")
 
     results = {
         "start_time": str(
@@ -267,7 +267,7 @@ def convert_cmd(
                 }
             )
     # section_line = div_section_line('Conversion Completed',2)
-    logger.stream(f"{div_section_line('Conversion Completed',2)}")
+    logger.stream(f"{div_section_line('Completed',2)}\n")
 
     # Add to results for the JSON
     # results["summary"]["duration_seconds"] = round(duration, 2)

@@ -25,10 +25,9 @@ def get_stream_info(
     level 1: selective entries are shown
     level 2: full scope of streams and format
     """
-    if file_path.is_dir():
-        logger.stream(f"Error: requires a file.", fg="red")
+    if not file_path.is_file():
+        logger.stream(f"Invalid file: {file_path}", fg="red")
         return None
-
     cmd_1 = [
         ffprobe_path,
         "-v",
@@ -67,18 +66,20 @@ def get_stream_info(
         return None
 
 
-def probe_file(file: Path, ffprobe_path: str) -> Optional[AudioRecord]:
+def probe_file(file_path: Path, ffprobe_path: str) -> Optional[AudioRecord]:
     """
     Takes an file path input and does `ffprobe` probing.
     Returns a AudioRecord instance or None
     """
-    
-    suffix = file.suffix.casefold()
+    if not file_path.is_file():
+        logger.stream(f"Invalid file: {file_path}", fg="red")
+        return None
+    suffix = file_path.suffix.casefold()
     if not suffix or not AudioFormat.is_supported(suffix):
         logger.stream(f"Suffix not supported or not available.", fg="yellow")
         return None
     try:
-        data = get_stream_info(file, ffprobe_path)
+        data = get_stream_info(file_path, ffprobe_path)
         is_readable = True
 
         if not data:
@@ -146,13 +147,13 @@ def probe_file(file: Path, ffprobe_path: str) -> Optional[AudioRecord]:
 
         audio_format = AudioFormat.from_codec(codec_name)
         if not audio_format:
-            raise Exception
+            return None
 
         has_embedded_artwork = any(s.get("codec_type") == "video" for s in data.streams)
-        size_bytes = int(format_data.get("size", 0) or file.stat().st_size or 0)
+        size_bytes = int(format_data.get("size", 0) or file_path.stat().st_size or 0)
 
         record = AudioRecord(
-            file_path=file,
+            file_path=file_path,
             audio_format=audio_format,
             bitrate_bps=bitrate_bps,
             sample_rate_hz=sample_rate,
@@ -173,14 +174,20 @@ def probe_file(file: Path, ffprobe_path: str) -> Optional[AudioRecord]:
         # print(f'record: {record}')
         return record
     except Exception as e:
+        try: 
+            audio_format = AudioFormat.from_suffix(file_path.suffix.casefold())
+            if not audio_format:
+                return None
+        except Exception as e:
+            return None
         unreadable_rec = AudioRecord(
-            file_path=file,
-            audio_format=AudioFormat.from_suffix(file.suffix.casefold()),
+            file_path=file_path,
+            audio_format=audio_format,
             bitrate_bps=0,
             sample_rate_hz=0,
             bits_per_sample=0,
             duration_sec=0,
-            size_bytes=file.stat().st_size, # get it via `file.stat()`
+            size_bytes=file_path.stat().st_size, # get it via `file.stat()`
             channels=0,
             year="0",
             album="",
