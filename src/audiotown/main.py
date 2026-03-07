@@ -350,6 +350,9 @@ def stats_cmd(
     def sort_logic(item: Tuple[str, Union[TypeSummary, DuplicateGroup]]):
         return (-item[1].count, item[0].lower())
 
+    def sort_logic_for_dupls(item: Tuple[str, Union[TypeSummary, DuplicateGroup]]):
+        return (-(item[1].count>1), item[0].lower())
+
     def display_width(s: str) -> int:
         # wcswidth returns -1 for some unprintables; treat as 0-width fallback
         w = wcswidth(s)
@@ -576,10 +579,13 @@ def stats_cmd(
 
     if find_duplicate and len(stats.fingerprints):
 
-        sub_total_name = "total # of dupl grps"
+        sub_total_name = "total # of dupl. grps"
         waste_size_string = "potential waste size to save"
-        sorted_fps = sorted(stats.fingerprints.items(),key=sort_logic)
-
+        duplicate_items = [
+        (key, val) for key, val in stats.fingerprints.items() 
+        if val.count > 1
+    ]
+        sorted_fps = sorted(duplicate_items, key=sort_logic)
         label_width = (
             # max(
                 max(
@@ -596,9 +602,11 @@ def stats_cmd(
         fn_str_width = 40
         # logger.stream(f'{min(app_config.TOPS,len(sorted_fps))}')
         total_waste_bytes = 0
-        for _, data in sorted_fps:
-            total_waste_bytes += data.waste_size
+
         if sorted_fps:
+
+            for _, data in sorted_fps:
+                total_waste_bytes += data.waste_size
             sorted_fps = sorted_fps[:min(app_config.TOPS,len(sorted_fps))]
             logger.stream(f"Top {min(app_config.TOPS,len(sorted_fps))} Possible Duplicate Groups (by file count):", fg="cyan")
             for dp_key, data in sorted_fps:
@@ -620,32 +628,32 @@ def stats_cmd(
                 size_str = (
                     f"{size_mb/1024:.1f} GB" if size_mb > 1024 else f"{size_mb:.1f} MB"
                 )
-                filen_str = ""
+                fname_str = ""
                 if sorted_recs:
                     strs = [("'"+ rec.file_path.name + "'"or "") for rec in sorted_recs if rec]
-                    filen_str = ", ".join(strs)
+                    fname_str = ", ".join(strs)
 
-                if not filen_str:
-                    filen_str = filen_str 
+                if not fname_str:
+                    fname_str = fname_str 
                 logger.stream(
                     f"  {ljust_display(dp_key.title(),label_width)} : {data.count:>6,} ({size_str:>8}) "
                 )
                 logger.stream(
-                    f"      |-->  {ljust_display(filen_str,fn_str_width) + ", etc."}", dim=True,
+                    f"      |-->  {ljust_display(fname_str,fn_str_width) + ', etc.'}", dim=True,
                 )
                 # logger.stream(
                 #     f"      |--  {ljust_display(waste_size_string ,label_width)} :  {size_string(data.waste_size):>5}",
                 #     dim=True
                 # )
 
-            # logger.stream(
-            #     f"  {ljust_display(sub_total_name, label_width)} : {len(stats.fingerprints.items()):>6,}\n",
-            #     dim=True,
-            # )
-            # logger.stream(
-            #     f"  {ljust_display('total size to save ', label_width)} : {(total_waste_bytes):>6,}\n",
-            #     dim=True,
-            # )
+            logger.stream(
+                f"  {ljust_display(sub_total_name, label_width)} : {len(sorted_fps):>6,}\n",
+                dim=True,
+            )
+            logger.stream(
+                f"  {ljust_display('total size to save ', label_width)} : {(total_waste_bytes/1024**3):>6,.1f}\n",
+                dim=True,
+            )
 
     if report_path:
         # If the user just typed '--report-path', this will be Path(".")

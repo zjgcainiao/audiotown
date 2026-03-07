@@ -321,16 +321,18 @@ class DuplicateGroup:
     def waste_size(self) -> int:
         if len(self.records) < 2:
             return 0
-            
+        if self.count == 1:
+            return 0
         # 1. Sort by Quality (Lossless first, then High Bitrate)
         # This ensures the 'Best' file is at index 0
+        records = self.records 
         sorted_recs = sorted(
             self.records, 
             key=lambda x: (not x.audio_format.is_lossless, -to_int(x.bitrate_bps))
         )
         
         # 2. Sum up every file EXCEPT the first one (the keeper)
-        return sum(f.size_bytes for f in sorted_recs[1:])
+        return sum(rec.size_bytes for rec in sorted_recs[1:])
 
 # ---------------------------
 # FolderStats
@@ -482,7 +484,8 @@ class FolderStats:
         dg = table[key]
         dg.key = key
         dg.count += 1
-        dg.size_bytes += size
+        # dg.size_bytes += size
+        dg.size_bytes += audio_record.size_bytes
         dg.records.append(audio_record)
         # recs = table[key].records
         # if len(recs) > 1:

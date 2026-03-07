@@ -22,7 +22,6 @@
    4. `convert` supports `--bitrate` when the `--encoder=aac` is specified. the default bitrate kbps is `256k`. `128k` and `320k` are the other valid inputs.
    5. `convert` by default tries to add artwork into files. It searches for `cover.jpg` or `library.jpg` at the root of the folder. if the source file does not contain an artwork, the command attempts to find such file and embed it into the output whenever possible.
 
-
 # Installation
 1. Ensure I have [FFmpeg](https://ffmpeg.org/download.html) installed on the system. It is the powerhouse that does the conversion and other heavy work like probing `ffprobe`. I will need it installed and working. MacOS users can install it via [homebrew](https://formulae.brew.sh/formula/ffmpeg): `brew install ffmpeg`.
 2. Python >=3.10. 
@@ -126,7 +125,7 @@ audiotown convert . --codec=aac --bitrate=256k --report-path=. --dry-run
 
     ```zsh
     cd /my/media/folder
-    audiotown stats . --find-pulicate
+    audiotown stats . --find-duplicate
     ```
 
 # LICENSE
