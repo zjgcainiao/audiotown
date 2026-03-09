@@ -228,19 +228,14 @@ def get_audio_files(
         if file.suffix.lower() in target_suffixes:
             yield file
 
-# max_workers = min(32, (os.cpu_count() or 4) * 2)
 def get_folder_stats(
     folder: Path,
     ffprobe_path: str,
-    max_workers: int = min(32, (os.cpu_count() or 4) * 2),
+    max_workers: int = AppConfig().MAX_WORKERS,
 ):
     """Gathers technical and metadata stats for a folder."""
 
     stats = FolderStats()
-
-    # if not folder:
-    #     return None
-
     # Define our 'Music & Audiobook' whitelist
     SUPPORTED = AppConfig().supported_extensions
     supported_str = ", ".join(SUPPORTED)
@@ -248,7 +243,6 @@ def get_folder_stats(
     # all_files = [f for f in folder.rglob("*") if f.suffix.lower() in SUPPORTED]
     
     all_files = list(get_audio_files(folder))
-    #  using {max_workers} threads
     logger.stream(
         f"Scanning files ending in one of the ({supported_str}) in {folder.resolve().stem}..."
     )

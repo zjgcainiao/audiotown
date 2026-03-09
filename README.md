@@ -1,7 +1,7 @@
 
-**AudioTown** is a lightweight audio file oriented package that intends to do two things:
-- Explain this media folder in the sense that interests me. 
-- It converts lossless files (`.flac`) in your collection to more apple friendly format, `.m4a`. Supports both high-quality _ALAC (Lossless)_ and _AAC (Lossy)_ as [codec](https://ffmpeg.org/ffmpeg-codecs.html). When it converts, it tries preserving metadata, including album artwork from source files.
+**AudioTown** is a lightweight audio management library that does: two things:
+- Explain this media folder in the fashion of a one-page summary. 
+- It converts lossless files (`.flac`) to more apple friendly format, `.m4a`. Supports both high-quality _ALAC (Lossless)_ and _AAC (Lossy)_ as [codec](https://ffmpeg.org/ffmpeg-codecs.html). When it converts, it preserves metadata, including, artist, track, album artwork and etc from source files.
 
 # What to expect
 1. `audiotown` contains three commands: `check`, `stats` and `convert`. This package requires `ffmepg` installed in the system. 
@@ -23,7 +23,7 @@
    5. `convert` by default tries to add artwork into files. It searches for `cover.jpg` or `library.jpg` at the root of the folder. if the source file does not contain an artwork, the command attempts to find such file and embed it into the output whenever possible.
 
 # Installation
-1. Ensure I have [FFmpeg](https://ffmpeg.org/download.html) installed on the system. It is the powerhouse that does the conversion and other heavy work like probing `ffprobe`. I will need it installed and working. MacOS users can install it via [homebrew](https://formulae.brew.sh/formula/ffmpeg): `brew install ffmpeg`.
+1. Ensure I have [FFmpeg](https://ffmpeg.org/download.html) installed on the system. It is the powerhouse that does the conversion and other heavy work like probing `ffprobe`. Will need it installed and working. MacOS users can install it via [homebrew](https://formulae.brew.sh/formula/ffmpeg): `brew install ffmpeg`.
 2. Python >=3.10. 
 3. Requires `click` and `wcwidth` libaries.
 
@@ -45,9 +45,11 @@ audiotown
 # 🛠 Usage
 
 ```txt
-audiotown [OPTIONS] COMMAND [ARGS]...
+Usage: audiotown [OPTIONS] COMMAND [ARGS]...
 Options:
+  --version   Show the version and exit.
   -h, --help  Show this message and exit.
+
 Commands:
   check    Verify that FFmpeg and dependencies are correctly installed.
   convert  Convert FLACs in FOLDER to Apple-friendly formats.
@@ -60,7 +62,8 @@ Commands:
 2. the output files from `audio convert` are under the subfolder `audiotown_export/` within `/path/to/album/folder`.
 3. The `/path/to/report/folder` can be `.` or any specified directories.
 4. use `--dry-run` to preview any perceived changes.
-5. The `convert` takes only `flac` files. It supports: `flac --> alac` or `flac --> aac`
+5. The `convert` takes only `flac` files. It supports: `flac --> alac` or `flac --> aac`.
+   1. `--bitrate` can be specified for `flac --> aac` (default: `256k`)
 
 ```zsh
 # 1. show additional help 
@@ -104,6 +107,7 @@ audiotown convert . --codec=aac --bitrate=256k --report-path=. --dry-run
    1. Run a preview to see what would be converted:
 
     ```zsh
+    # preview the conversion that will be done to any flac files in `AlbumFolder`. 
     audiotown convert ./AlbumFolder --dry-run
     ```
 

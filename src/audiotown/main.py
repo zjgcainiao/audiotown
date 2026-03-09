@@ -333,6 +333,8 @@ def stats_cmd(
     find_duplicate: bool = False, 
 ):
     """Stats Dashboard & Insight tool."""
+    if not folder or not folder.is_dir():
+        abort(f"Error. Cannot open the folder {folder} or it does not exists.")
     # start_perf = time.perf_counter() # More accurate for measuring duration
     app_context = ctx.obj
     if not app_context.ff_config:
