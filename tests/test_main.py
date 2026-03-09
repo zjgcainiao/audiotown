@@ -6,7 +6,6 @@ from audiotown.logger import logger
 
 from audiotown.main import ensure_ffmpeg
 
-
 class TestDependencyChecks(unittest.TestCase):
 
     @patch("audiotown.main.shutil.which")

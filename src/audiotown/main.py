@@ -24,14 +24,17 @@ from audiotown.consts import (
     AppConfig,
     AppContext,
     TypeSummary,
-    DuplicateGroup
+    DuplicateGroup,
+    CmdArgsConfig,
+    ConversionDetail,
+    ConversionReport,
 )
-from audiotown.logger import logger
+from audiotown.logger import logger, SessionLogger
 from audiotown.report import create_report_for_convert, generate_report_for_stats
 
 app_config = AppConfig()
 app_context = AppContext(
-    start_time=time.perf_counter(), app_config=app_config, logger=logger
+    start_time=time.perf_counter(), app_config=app_config, logger=SessionLogger()
 )
 
 
@@ -44,8 +47,9 @@ def abort(message: str, code: int = 1) -> NoReturn:
 
 def ensure_ffmpeg() -> Tuple[str, str]:
     """Checks for ffmpeg and offers to install it via 'Homebrew' if missing."""
-    ffmpeg_path: Optional[str] = None
-    ffprobe_path: Optional[str]
+    ffmpeg_path: Optional[str] 
+    ffprobe_path: Optional[str] 
+
     ffmpeg_path = shutil.which("ffmpeg")
     ffprobe_path = shutil.which("ffprobe")
     if ffmpeg_path and ffprobe_path:
@@ -81,7 +85,7 @@ def ensure_ffmpeg() -> Tuple[str, str]:
 @click.group(chain=False, context_settings={"help_option_names": ["-h", "--help"]})
 @click.version_option(version=str(app_config.version), prog_name="audiotown")
 @click.pass_context
-def cli_runner(ctx):
+def cli_runner(ctx:click.Context):
     """
     AudioTown: A toolkit for Apple-optimized music libraries. It offers
     lossless to apple alac/aac conversion and detailed overview for any selected media folders.
@@ -98,12 +102,15 @@ def cli_runner(ctx):
     """
     # 1. SETUP: This runs BEFORE any subcommand
     ctx.ensure_object(dict)
+    # ctx.ensure_object(AppContext)
     ctx.obj["start_time"] = time.perf_counter()
     divs_lvl1 = app_config.divs_lvl1
 
     logger.stream(f"{divs_lvl1} Audiotown CLI Starting {divs_lvl1}", bold=True)
     ffpmeg_path, ffprobe_path = ensure_ffmpeg()
     ff_config: FFmpegConfig = FFmpegConfig(ffpmeg_path, ffprobe_path)
+    if not ff_config:
+        abort("Missing Dependencies. Exited unexpected.")
     app_context.ff_config = ff_config
 
     # ctx.obj["app_config"]= app_config
@@ -173,8 +180,11 @@ def convert_cmd(
     """
     # validation resources: ffmpeg
     app_context = ctx.obj
+    logger = app_context.logger
     if not app_context or not app_context.app_config or not app_context.ff_config:
-        abort("Unexpected error.")
+        abort("Unexpected error. missing dependencices")
+    
+    logger.stream(f"{div_section_line('Converting',2)}")
     divs_lvl2 = app_context.app_config.divs_lvl2
     search_formats = [
         AudioFormat.FLAC,
@@ -186,20 +196,17 @@ def convert_cmd(
             "Error: ffmpeg/ffprobe not detected on system path.", fg="red", err=True
         )
         abort("Error: ffmpeg/ffprobe not detected on system path")
-
-    # if not dry_run:
-    #     click.confirm(f"This will search and convert files in folder {folder.resolve().name}. Continue?", abort=True)
-
-    logger.stream(f"{div_section_line('Converting',2)}")
+    
     if dry_run:
         logger.stream(">>> Dry Run (Preview) mode: ON", fg="cyan")
-
+        app_context.dry_dun = dry_run
     folder = folder.resolve()
     output_base = folder / f"audiotown_export"
     if codec:
         target = AudioFormat.from_codec(codec)
     else:
         target = AudioFormat.ALAC
+
     target = AudioFormat.from_codec(codec) if codec else AudioFormat.ALAC
     # Detect if the user EXPLICITLY provided a bitrate
     user_provided_bitrate = bitrate is not None
@@ -216,7 +223,7 @@ def convert_cmd(
         s_bitrate = f"(bitrate_kbps: {effective_bitrate})"
 
     logger.stream(
-        f"  {f"source format(s)":<16} : {" ".join(search_codecs):<{len(search_codecs)}} "
+        f"  {f"source format":<16} : {" ".join(search_codecs):<{len(search_codecs)}} "
     )
     logger.stream(f"  {f"output format":<16} : {codec:<{len(codec)+1}} {s_bitrate}")
     # ONLY show warning if it's lossless AND the user specifically typed --bitrate
@@ -230,25 +237,25 @@ def convert_cmd(
     # 1. Find files
 
     files = list(get_audio_files(folder, search_formats))
-    ext_string = ", ".join(search_exts)
     total = len(files)
-    if total == 0:
+    if not total:
         logger.stream("No file found.", fg="yellow")
         return
-
-    logger.stream(f"{total} Found. Processing ...", fg="cyan")
-
-    results = {
-        "start_time": str(
-            datetime.datetime.now().astimezone().strftime("%Y-%m-%dT%H:%M:%S%z")
-        ),
-        "summary": {"total": 0, "success": 0, "failed": 0},
-        "details": [],
-    }
+    else:
+        logger.stream(f"{total} Found...", fg="cyan")
+    
+    report = ConversionReport()
+    # results = {
+    #     "start_time": str(
+    #         datetime.datetime.now().astimezone().strftime("%Y-%m-%dT%H:%M:%S%z")
+    #     ),
+    #     "summary": {"total": 0, "success": 0, "failed": 0},
+    #     "details": [],
+    # }
 
     with click.progressbar(
         files,
-        label="Converting",
+        label="In progress",
     ) as bar:
         for file_path in bar:
             # bar.label = f"Processing {file_path.name[:25]}..."
@@ -261,56 +268,43 @@ def convert_cmd(
                 file_path,
                 target,
                 target_path,
-                app_context.ff_config,
-                logger,
+                app_context,
                 bitrate,
-                dry_run,
             )
 
             # Record the result
-            results["summary"]["total"] += 1
             if success:
                 logger.log(
                     f"\n Success: {file_path.name[:25]} --> {target_path.name[:25]} "
                 )
-                results["summary"]["success"] += 1
-            else:
-                results["summary"]["failed"] += 1
+            conv_detail = ConversionDetail(
+                source=str(file_path),
+                destination=str(target_path),
+                status="SUCCESS" if success else "FAILED",
+                error_message=None if success else "Codec mismatch or FFmpeg error"
+            )
+            report.add_detail(conv_detail)
 
             logger.log(f"{error_message}")
 
-            results["details"].append(
-                {
-                    "source": str(file_path),
-                    "destination": str(
-                        target_path
-                    ),  # Pass target_path into your result list
-                    "status": "SUCCESS" if success else "FAILED",
-                }
-            )
-    # section_line = div_section_line('Conversion Completed',2)
     logger.stream(f"{div_section_line('Completed',2)}\n")
 
     # Add to results for the JSON
-    # results["summary"]["duration_seconds"] = round(duration, 2)
-    results["summary"]["is_dry_run"] = str(dry_run)
-    logger.stream(format_section("Summary", results["summary"]))
+    logger.stream(format_section("Summary", {"total":report.total, "success":report.success,"failed":report.failed}))
     logger.stream(" ")
-    logger.stream(f"output dir: {str(output_base)}")
+    logger.stream(f" 'export' dir: {str(output_base)}")
 
     if report_path:
         base_dir = report_path.resolve()
-        # 1. Create a timestamped folder name
-        timestamp = datetime.datetime.now().astimezone().strftime("%Y%m%d_%H%M%S")
-        final_dir = base_dir / f"audiotown_convert"
+        final_dir = Path(base_dir / app_context.app_config.EXPORT_DIR_NAME)
 
-        logger.stream(
-            f"report dir: {str(Path(final_dir).resolve())}",
-        )
-        # 2. Create and populate
+        # create the report dir
         final_dir.mkdir(parents=True, exist_ok=True)
-        rp_success = create_report_for_convert(final_dir, results, logger)
-
+        # rp_success = create_report_for_convert(final_dir, results, logger=app_context.logger)
+        rp_success, err_msg = create_report_for_convert(final_dir, report, logger=app_context.logger)
+        logger.stream(
+            f" 'report' dir: {str(Path(final_dir).resolve())}",
+        )
 
 # ----------------
 # SUBCOMMAND 2: stats
@@ -336,7 +330,7 @@ def stats_cmd(
     ctx: click.Context,
     folder: Path,
     report_path: Path,
-    find_duplicate: bool, 
+    find_duplicate: bool = False, 
 ):
     """Stats Dashboard & Insight tool."""
     # start_perf = time.perf_counter() # More accurate for measuring duration
@@ -403,7 +397,7 @@ def stats_cmd(
     )
     for family_name, data in sorted_families:
         total_size_bytes += int(data.size_bytes)
-        size_mb = data.size_bytes / 1024**2
+        size_mb = data.size_bytes / app_context.app_config.MEGA_BYTES
         size_str = f"{size_mb/1024:.1f} GB" if size_mb > 1024 else f"{size_mb:.1f} MB"
         family_str = f"{safe_division(100*data.count, stats.total_files):>4.0f} % is {family_name.title()}"
         logger.stream(family_str)
@@ -422,7 +416,7 @@ def stats_cmd(
         embedded_artwork_pc = f"{safe_division(100 * cnt_embedded_artwork, stats.total_files ):>4.0f} % contains embedded thumbnail or artwork."
         logger.stream(f"{embedded_artwork_pc}\n", bold=True)
     if stats.bloated_files and len(stats.by_bloated):
-        saved_size_mb = 0.3 * stats.by_bloated["bloated"].size_bytes / 1024**2
+        saved_size_mb = 0.3 * stats.by_bloated["bloated"].size_bytes / app_context.app_config.MEGA_BYTES
         saved_size_str = (
             f"{saved_size_mb/1024:.1f} GB"
             if saved_size_mb > 1024
@@ -443,11 +437,9 @@ def stats_cmd(
         comment_str = ""
 
     # --- 1. Top Extensions (by file count) ---
-
     logger.stream(
         f"Top {min(tops,len(stats.by_ext))} Extensions (by file count):", fg="cyan"
     )
-
     sorted_exts = sorted(stats.by_ext.items(), key=sort_logic)
     top_exts = sorted_exts[:tops]
     sub_total_name = "Total # of Extensions"
@@ -513,7 +505,6 @@ def stats_cmd(
             )
             + 1
         )
-        # print(f"max ablum length: {label_width}")
         for album, data in top_albums:
             count = data.count
             logger.stream(f"  {ljust_display(album, label_width)}: {count:>7,}")
@@ -523,7 +514,6 @@ def stats_cmd(
         )
 
     # --- 4. Top Genres (Still sorted by count, then A-Z) ---
-
     if stats.genres:
         logger.stream(
             f"Top {min(app_config.TOPS,len(stats.genres))} Genres (by file count):", fg="cyan"
@@ -535,7 +525,7 @@ def stats_cmd(
                 max((display_width(genre) for genre, _ in top_genres), default=0),
                 len(sub_total_name),
             )
-            + 2
+            + 1
         )
         for genre, data in sorted_genres[:tops]:
             count = data.count
@@ -579,7 +569,7 @@ def stats_cmd(
 
     if find_duplicate and len(stats.fingerprints):
 
-        sub_total_name = "total # of dupl. grps"
+        sub_total_name = "total # of dupl. groups"
         waste_size_string = "potential waste size to save"
         duplicate_items = [
         (key, val) for key, val in stats.fingerprints.items() 
@@ -630,7 +620,7 @@ def stats_cmd(
                 )
                 fname_str = ""
                 if sorted_recs:
-                    strs = [("'"+ rec.file_path.name + "'"or "") for rec in sorted_recs if rec]
+                    strs = [("'"+ rec.file_path.name + "'" or "") for rec in sorted_recs if rec]
                     fname_str = ", ".join(strs)
 
                 if not fname_str:
@@ -641,10 +631,6 @@ def stats_cmd(
                 logger.stream(
                     f"      |-->  {ljust_display(fname_str,fn_str_width) + ', etc.'}", dim=True,
                 )
-                # logger.stream(
-                #     f"      |--  {ljust_display(waste_size_string ,label_width)} :  {size_string(data.waste_size):>5}",
-                #     dim=True
-                # )
 
             logger.stream(
                 f"  {ljust_display(sub_total_name, label_width)} : {len(sorted_fps):>6,}\n",
@@ -675,14 +661,13 @@ def check_cmd():
         ffmpeg_p, ffprobe_p = ensure_ffmpeg()
 
         # If we reach here, they exist
-        logger.stream(f"  FFmpeg found:  {ffmpeg_p}", fg="green")
-        logger.stream(f"  FFprobe found: {ffprobe_p}", fg="green")
-        logger.stream("Ready to go!", bold=True)
+        logger.stream(f"  FFmpeg detected:  {ffmpeg_p}", fg="green")
+        logger.stream(f"  FFprobe detected: {ffprobe_p}", fg="green")
+        logger.stream("Ready!", bold=True)
 
     except click.Abort:
         # ensure_ffmpeg already printed the error, so we just exit
         abort("Command exited unexpectedly.")
-
 
 # ----------------
 # SUBCOMMAND 4: inspect

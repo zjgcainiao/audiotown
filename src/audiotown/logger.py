@@ -1,15 +1,18 @@
 
 import datetime
 import click
-from pathlib import Path
 from typing import List, Optional
 from dataclasses import dataclass, field
-
+import time
 
 @dataclass
 class SessionLogger:
     logs: List[str] = field(default_factory=list)
     time_format: str = "%H:%M:%S"
+
+    def __init__(self):
+        self.start_time = time.time()
+        self.logs = list()
 
     def _timestamp(self) -> str:
         return datetime.datetime.now().strftime(self.time_format)
@@ -49,6 +52,5 @@ class SessionLogger:
                     )
     def get_full_log(self) -> str:
         return "\n".join(self.logs)
-
 
 logger = SessionLogger()

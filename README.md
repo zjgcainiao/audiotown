@@ -56,8 +56,8 @@ Commands:
 
 ## Examples
 
-1. The simplest way to use `AudioTown` is to run it in a folder containing FLAC files: `audiotown convert /path/to/album/folder --codec=alac --report-path=/path/to/report/folder --dry-run`. The file search is resursive.
-2. the output files from `audio convert` are under the subfolder `audiotown_converted/` within `/path/to/album/folder`.
+1. The simplest way to use `AudioTown` is to run it in a folder containing FLAC files: `audiotown convert /path/to/album/folder --codec=alac --report-path=/path/to/report/folder --dry-run`. The search is recursive.
+2. the output files from `audio convert` are under the subfolder `audiotown_export/` within `/path/to/album/folder`.
 3. The `/path/to/report/folder` can be `.` or any specified directories.
 4. use `--dry-run` to preview any perceived changes.
 5. The `convert` takes only `flac` files. It supports: `flac --> alac` or `flac --> aac`

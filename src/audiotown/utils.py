@@ -91,12 +91,14 @@ def div_blocks(number: int, divider: str = "= ") -> str:
 def div_section_line(message: str = "", level: int = 1) -> str:
     """Creates a centered section line with consistent padding."""
     match level:
+
+        # heading 1 style
         case 1:
             blocks = div_blocks(10, "= ")
         case 2:
             blocks = div_blocks(5, "- ")
         case 3:
-            blocks = div_blocks(5, "*")
+            blocks = div_blocks(3, "*")
         case _:
             blocks = div_blocks(10, "= ")
     blocks = blocks.strip()
