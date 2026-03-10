@@ -1,6 +1,6 @@
 
-**AudioTown** is a lightweight audio management library that does: two things:
-- Explain this media folder in the fashion of a one-page summary. 
+**AudioTown** is a lightweight audio management library that does  two things:
+- Explain this media folder in the fashion of a one-page summary. It scans a folder of 13K files within 33-50 seconds.
 - It converts lossless files (`.flac`) to more apple friendly format, `.m4a`. Supports both high-quality _ALAC (Lossless)_ and _AAC (Lossy)_ as [codec](https://ffmpeg.org/ffmpeg-codecs.html). When it converts, it preserves metadata, including, artist, track, album artwork and etc from source files.
 
 # What to expect
@@ -20,11 +20,17 @@
    2. `convert` also supports `--dry-run` as a tool to preview changes made in a conversion.
    3. `convert` searches files recursively so I can specify a high-level `folder` like `Media` or `myMediaHub`. Try with one ablum folder first.
    4. `convert` supports `--bitrate` when the `--encoder=aac` is specified. the default bitrate kbps is `256k`. `128k` and `320k` are the other valid inputs.
-   5. `convert` by default tries to add artwork into files. It searches for `cover.jpg` or `library.jpg` at the root of the folder. if the source file does not contain an artwork, the command attempts to find such file and embed it into the output whenever possible.
+   5. `convert` by default tries to add artwork into files when converting. It searches for `cover.jpg` or `library.jpg` at the root of the folder. if the source file does not contain an artwork, the command attempts to find such file and embed it into the output whenever possible.
+
+## Demo
+- ![convert demo](docs/demo_convert.png)
+
+
+- ![stats demo](docs/demo_stat.png)
 
 # Installation
 1. Ensure I have [FFmpeg](https://ffmpeg.org/download.html) installed on the system. It is the powerhouse that does the conversion and other heavy work like probing `ffprobe`. Will need it installed and working. MacOS users can install it via [homebrew](https://formulae.brew.sh/formula/ffmpeg): `brew install ffmpeg`.
-2. Python >=3.10. 
+2. ![Version](https://img.shields.io/pypi/v/audiotown) ![Python](https://img.shields.io/pypi/pyversions/audiotown) >=3.10. 
 3. Requires `click` and `wcwidth` libaries.
 
 ```zsh
@@ -58,8 +64,8 @@ Commands:
 
 ## Examples
 
-1. The simplest way to use `AudioTown` is to run it in a folder containing FLAC files: `audiotown convert /path/to/album/folder --codec=alac --report-path=/path/to/report/folder --dry-run`. The search is recursive.
-2. the output files from `audio convert` are under the subfolder `audiotown_export/` within `/path/to/album/folder`.
+1. The simplest way to use `AudioTown` is to run it in a folder containing FLAC files: `audiotown convert /path/to/album/folder --codec=alac --report-path=/path/to/report/folder --dry-run`. The search is recursive.\[=po-iu9o0[]\
+2. . the output files from `audio convert` are under the subfolder `audiotown_export/` within `/path/to/album/folder`.
 3. The `/path/to/report/folder` can be `.` or any specified directories.
 4. use `--dry-run` to preview any perceived changes.
 5. The `convert` takes only `flac` files. It supports: `flac --> alac` or `flac --> aac`.
@@ -100,7 +106,10 @@ audiotown convert . --codec=aac --bitrate=256k --report-path=. --dry-run
   |`--codec`|	alac or aac. used with `convert`. |alac|
   |`--bitrate`|	Bitrate for AAC (128k, 256k, 320k). only useful when `--codec=aac`|	256k|
   |`--dry-run`|	Preview conversion without writing files. used with `convert`	|False|
-  |`--find-duplicate`| finds potential duplicate files by parallel comparisions via `arist`, `title` and `file_name`.	|disabled|
+  |`--find-duplicate`| finds potential duplicate files by parallel comparisions via `arist`, `title` and `file_name`.|
+4
+]
+|disabled|
   |`--report-path`|	generates a full log, including a json. work with both `convert` and `stats`.	|disabled|
 
 1. Examples
