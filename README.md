@@ -137,7 +137,7 @@ audiotown convert . --codec=aac --bitrate=256k --report-path=. --dry-run
     ```
 ## 🤝 Contributing
 
-Audiotown is a labor of love built to handle my own 100GB+ library. If you find a file that crashes the scan, or if you have an idea to make the Apple-conversion even smoother, I’d love your input!
+`Audiotown` is a labor of love built to handle my own 100GB+ library. If you find a file that crashes the scan, or if you have an idea to make the Apple-conversion even smoother, I’d love your input!
 
 ### How to Help:
 * **Report Bugs:** Open an [Issue](https://github.com/zjgcainiao/audiotown/issues) if a specific audio format causes a hiccup. Please include the output of your `meta.txt`!
