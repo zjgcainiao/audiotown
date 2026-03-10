@@ -103,10 +103,8 @@ audiotown convert . --codec=aac --bitrate=256k --report-path=. --dry-run
   |:---|:---|---:|
   |`--codec`|	alac or aac. used with `convert`. |alac|
   |`--bitrate`|	Bitrate for AAC (128k, 256k, 320k). only useful when `--codec=aac`|	256k|
-  |`--dry-run`|	Preview conversion without writing files. used with `convert`	|False|
+  |`--dry-run`|	Preview conversion without writing files. used with `convert`	|disabled|
   |`--find-duplicate`| finds potential duplicate files by parallel comparisions via `arist`, `title` and `file_name`.|
-4
-]
 |disabled|
   |`--report-path`|	generates a full log, including a json. work with both `convert` and `stats`.	|disabled|
 
@@ -138,6 +136,18 @@ audiotown convert . --codec=aac --bitrate=256k --report-path=. --dry-run
     cd /my/media/folder
     audiotown stats . --find-duplicate
     ```
+## 🤝 Contributing
+
+Audiotown is a labor of love built to handle my own 100GB+ library. If you find a file that crashes the scan, or if you have an idea to make the Apple-conversion even smoother, I’d love your input!
+
+### How to Help:
+* **Report Bugs:** Open an [Issue](https://github.com/zjgcainiao/audiotown/issues) if a specific audio format causes a hiccup. Please include the output of your `meta.txt`!
+* **Feature Requests:** Want a specific target bitrate or a new "Theme" for the progress bar? Let me know in the Issues.
+* **Code:** Pull Requests are welcome! 
+    1. Fork the repo.
+    2. Create a feature branch (`git checkout -b feature/AmazingFeature`).
+    3. Commit your changes.
+    4. Push to the branch and open a PR.
 
 # LICENSE
 Licensed under the [MIT License]((https://github.com/zjgcainiao/audiotown/blob/main/LICENSE)).
