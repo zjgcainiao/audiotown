@@ -149,4 +149,4 @@ Audiotown is a labor of love built to handle my own 100GB+ library. If you find 
     4. Push to the branch and open a PR.
 
 # LICENSE
-Licensed under the [MIT License](https://raw.githubusercontent.com/zjgcainiao/audiotown/blob/main/LICENSE).
+Licensed under the [MIT License](https://raw.githubusercontent.com/zjgcainiao/audiotown/main/LICENSE).
