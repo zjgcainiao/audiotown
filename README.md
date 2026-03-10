@@ -23,10 +23,8 @@
    5. `convert` by default tries to add artwork into files when converting. It searches for `cover.jpg` or `library.jpg` at the root of the folder. if the source file does not contain an artwork, the command attempts to find such file and embed it into the output whenever possible.
 
 ## Demo
-- ![convert demo](https://github.com/zjgcainiao/audiotown/tree/main/docs/demo_convert.png)
-
-
-- ![stats demo](https://github.com/zjgcainiao/audiotown/tree/main/docs/demo_stat.png)
+- ![convert demo](https://raw.githubusercontent.com/zjgcainiao/audiotown/main/docs/demo_convert.png)
+- ![stats demo](https://raw.githubusercontent.com/zjgcainiao/audiotown/main/docs/demo_stat.png)
 
 # Installation
 1. Ensure I have [FFmpeg](https://ffmpeg.org/download.html) installed on the system. It is the powerhouse that does the conversion and other heavy work like probing `ffprobe`. Will need it installed and working. MacOS users can install it via [homebrew](https://formulae.brew.sh/formula/ffmpeg): `brew install ffmpeg`.
