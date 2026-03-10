@@ -43,13 +43,13 @@ def create_report_for_convert(
         )
 
         # 4. Save Meta.txt (The context)
-        meta_content = [
-            "Software Name: Audiotown",
-            f"Version: {audiotown.__version__}",
-            f"User: {Path.home().name}",
-            f"Python: {platform.python_version()}",
-            f"OS: {platform.platform()}",
-        ]
+        # meta_content = [
+        #     "Software Name: Audiotown",
+        #     f"Version: {audiotown.__version__}",
+        #     f"User: {Path.home().name}",
+        #     f"Python: {platform.python_version()}",
+        #     f"OS: {platform.platform()}",
+        # ]
 
         # Write into meta.txt
         # meta_text = "\n".join(meta_content)

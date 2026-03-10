@@ -1,7 +1,7 @@
 import os
 import json
 import subprocess
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Optional, Iterable, Generator
@@ -25,7 +25,7 @@ def get_stream_info(
     level 2: full scope of streams and format
     """
     if not file_path.is_file():
-        logger.stream(f"Invalid file: {file_path}", fg="red")
+        logger.stream(f"{file_path} does not exist or can't be opened", fg="red")
         return None
     cmd_1 = [
         ffprobe_path,
@@ -237,26 +237,54 @@ def get_folder_stats(
 
     stats = FolderStats()
     # Define our 'Music & Audiobook' whitelist
-    SUPPORTED = AppConfig().supported_extensions
-    supported_str = ", ".join(SUPPORTED)
+
     # 1. Collect paths (Fast)
     # all_files = [f for f in folder.rglob("*") if f.suffix.lower() in SUPPORTED]
     
     all_files = list(get_audio_files(folder))
-    logger.stream(
-        f"Scanning files ending in one of the ({supported_str}) in {folder.resolve().stem}..."
-    )
-    logger.stream(f"{len(all_files):,} Found.")
+    # SUPPORTED = AppConfig().supported_extensions
+    # supported_str = ", ".join(SUPPORTED)
+    # logger.stream(
+    #     f"Scanning files ending in one of the ({supported_str}) in {folder.resolve().stem}..."
+    # )
+    logger.stream(f"{len(all_files):,} Found...", fg="cyan")
 
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        # map() handles distributing the work across threads
-        results = list(executor.map(lambda f: probe_file(f, ffprobe_path), all_files))
+    # with ThreadPoolExecutor(max_workers=max_workers) as executor:
+    #     # map() handles distributing the work across threads
+        
+    #     results = list(executor.map(lambda f: probe_file(f, ffprobe_path), all_files))
 
-    for record in results:
-        if record:
-            # The .add() method is your 'Single Source of Truth'
-            stats.add(record)
-        else:
-            # Handle cases where probe_file might return None (though it shouldn't)
-            continue
+    # for record in results:
+    #         # results.update(0)
+    #         if record:
+    #             # The .add() method is your 'Single Source of Truth'
+    #             stats.add(record)
+    #         else:
+    #             # Handle cases where probe_file might return None (though it shouldn't)
+    #             continue
+    # return stats
+    import click
+    with click.progressbar(
+            length=len(all_files),
+            label=click.style('Scanning library',fg='cyan',bold=True),
+            show_percent=True,   # Shows '45%'
+            show_pos=True, # Shows [120/13000]
+            fill_char=click.style('█',fg='cyan',bold=True),
+            empty_char='░'
+        ) as bar:
+            
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # 2. Submit all tasks
+            futures = {executor.submit(probe_file, f, ffprobe_path): f for f in all_files}
+            
+            # 3. Process as they finish
+            for future in as_completed(futures):
+                record = future.result()
+                
+                if record:
+                    stats.add(record)
+                
+                # 4. Update the bar immediately
+                bar.update(1)
+                
     return stats

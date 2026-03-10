@@ -130,9 +130,8 @@ def process_result(ctx: click.Context, result, **kwargs):
         logger.stream(f"Run time: {run_time:.1f} s\n")
         logger.stream(f"Use '--report-path' flag to export a full set of logs.")
         logger.stream(f"Type 'audiotown' for help.")
-        section_line = div_section_line("Ended", 1)
+        section_line = div_section_line("End of Audiotown CLI", 1)
         logger.stream(f"{section_line}", bold=True)
-
 
 # ----------------
 # SUBCOMMAND 1: convert
@@ -252,10 +251,20 @@ def convert_cmd(
     #     "summary": {"total": 0, "success": 0, "failed": 0},
     #     "details": [],
     # }
-
+    styled_label = click.style("In progress", fg="cyan", bold=True)
+    styled_char = click.style("█", fg="cyan")
     with click.progressbar(
         files,
-        label="In progress",
+        label=styled_label,
+        fill_char=styled_char,
+        # label="In progress",
+        show_pos=True,       # This is the magic! Shows '12/2030'
+        show_percent=True,   # Shows '45%'
+        # fill_char='█',       # The 'Solid' look
+        empty_char='░',      # The 'Ghost' look
+        color=True,
+        
+        # color="cyan"         # Because everything looks better in Cyan
     ) as bar:
         for file_path in bar:
             # bar.label = f"Processing {file_path.name[:25]}..."
@@ -292,7 +301,7 @@ def convert_cmd(
     # Add to results for the JSON
     logger.stream(format_section("Summary", {"total":report.total, "success":report.success,"failed":report.failed}))
     logger.stream(" ")
-    logger.stream(f" 'export' dir: {str(output_base)}")
+    logger.stream(f" export dir: {str(output_base)}")
 
     if report_path:
         base_dir = report_path.resolve()
@@ -303,7 +312,7 @@ def convert_cmd(
         # rp_success = create_report_for_convert(final_dir, results, logger=app_context.logger)
         rp_success, err_msg = create_report_for_convert(final_dir, report, logger=app_context.logger)
         logger.stream(
-            f" 'report' dir: {str(Path(final_dir).resolve())}",
+            f" report dir: {str(Path(final_dir).resolve())}",
         )
 
 # ----------------
@@ -361,9 +370,15 @@ def stats_cmd(
         return s + (" " * pad)
 
     # logger.stream(f"{lvl2_blocks}Scan Library: {folder.name}{lvl2_blocks}", bold=True)
-    stats = get_folder_stats(folder, app_context.ff_config.ffprobe_path)
 
-    # --- 1. File Type Summary (Table-like) ---
+    SUPPORTED = AppConfig().supported_extensions
+    supported_str = ", ".join(SUPPORTED)
+    logger.stream(
+        f"Scanning audio files ending in one of the ({supported_str}) in {folder.resolve().stem}..."
+    )
+    # stats = get_folder_stats(folder, app_context.ff_config.ffprobe_path)
+
+    stats = get_folder_stats(folder, app_context.ff_config.ffprobe_path)
     logger.stream(f"{div_section_line("Stats", 2)}\n")
     total_size_bytes = 0
     total_gb = stats.total_bytes / app_config.GIGA_BYTES
