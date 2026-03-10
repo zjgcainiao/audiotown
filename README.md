@@ -1,5 +1,4 @@
-
-**AudioTown** is a lightweight audio management library that does  two things:
+A lightweight, high-performance CLI for managing audio libraries. Optimized for FLAC to Apple-friendly (ALAC/AAC) conversion with smart deduplication.
 - Explain this media folder in the fashion of a one-page summary. It scans a folder of 13K files within 33-50 seconds.
 - It converts lossless files (`.flac`) to more apple friendly format, `.m4a`. Supports both high-quality _ALAC (Lossless)_ and _AAC (Lossy)_ as [codec](https://ffmpeg.org/ffmpeg-codecs.html). When it converts, it preserves metadata, including, artist, track, album artwork and etc from source files.
 
@@ -108,7 +107,7 @@ audiotown convert . --codec=aac --bitrate=256k --report-path=. --dry-run
 |disabled|
   |`--report-path`|	generates a full log, including a json. work with both `convert` and `stats`.	|disabled|
 
-1. Examples
+2. Examples
    1. Run a preview to see what would be converted:
 
     ```zsh
