@@ -6,16 +6,16 @@ import datetime
 import time
 from pathlib import Path
 from wcwidth import wcswidth
-from typing import Optional, NoReturn, Tuple, Union
+from typing import Optional, NoReturn, Tuple, Union, List
 from audiotown.utils import (
     format_section,
     div_blocks,
     div_section_line,
     safe_division,
     to_int,
-    size_string
+    size_string,
 )
-from audiotown.converter import convert_flac_to_apple_friendly
+from audiotown.converter import convert_flac_to_apple_friendly, run_parallel_conversion
 from audiotown.stats import get_folder_stats, get_audio_files
 from audiotown.consts import (
     AudioFormat,
@@ -28,6 +28,8 @@ from audiotown.consts import (
     CmdArgsConfig,
     ConversionDetail,
     ConversionReport,
+    ConversionTask,
+    ConversionTaskResult,
 )
 from audiotown.logger import logger, SessionLogger
 from audiotown.report import create_report_for_convert, generate_report_for_stats
@@ -47,8 +49,8 @@ def abort(message: str, code: int = 1) -> NoReturn:
 
 def ensure_ffmpeg() -> Tuple[str, str]:
     """Checks for ffmpeg and offers to install it via 'Homebrew' if missing."""
-    ffmpeg_path: Optional[str] 
-    ffprobe_path: Optional[str] 
+    ffmpeg_path: Optional[str]
+    ffprobe_path: Optional[str]
 
     ffmpeg_path = shutil.which("ffmpeg")
     ffprobe_path = shutil.which("ffprobe")
@@ -85,7 +87,7 @@ def ensure_ffmpeg() -> Tuple[str, str]:
 @click.group(chain=False, context_settings={"help_option_names": ["-h", "--help"]})
 @click.version_option(version=str(app_config.version), prog_name="audiotown")
 @click.pass_context
-def cli_runner(ctx:click.Context):
+def cli_runner(ctx: click.Context):
     """
     AudioTown: A toolkit for Apple-optimized music libraries. It offers
     lossless to apple alac/aac conversion and detailed overview for any selected media folders.
@@ -132,6 +134,7 @@ def process_result(ctx: click.Context, result, **kwargs):
         logger.stream(f"Type 'audiotown' for help.")
         section_line = div_section_line("End of Audiotown CLI", 1)
         logger.stream(f"{section_line}", bold=True)
+
 
 # ----------------
 # SUBCOMMAND 1: convert
@@ -182,7 +185,7 @@ def convert_cmd(
     logger = app_context.logger
     if not app_context or not app_context.app_config or not app_context.ff_config:
         abort("Unexpected error. missing dependencices")
-    
+
     logger.stream(f"{div_section_line('Converting',2)}")
     divs_lvl2 = app_context.app_config.divs_lvl2
     search_formats = [
@@ -195,7 +198,7 @@ def convert_cmd(
             "Error: ffmpeg/ffprobe not detected on system path.", fg="red", err=True
         )
         abort("Error: ffmpeg/ffprobe not detected on system path")
-    
+
     if dry_run:
         logger.stream(">>> Dry Run (Preview) mode: ON", fg="cyan")
         app_context.dry_dun = dry_run
@@ -242,62 +245,82 @@ def convert_cmd(
         return
     else:
         logger.stream(f"{total} Found...", fg="cyan")
-    
-    report = ConversionReport()
-    # results = {
-    #     "start_time": str(
-    #         datetime.datetime.now().astimezone().strftime("%Y-%m-%dT%H:%M:%S%z")
-    #     ),
-    #     "summary": {"total": 0, "success": 0, "failed": 0},
-    #     "details": [],
-    # }
-    styled_label = click.style("In progress", fg="cyan", bold=True)
-    styled_char = click.style("█", fg="cyan")
-    with click.progressbar(
-        files,
-        label=styled_label,
-        fill_char=styled_char,
-        show_pos=True,       # This is the magic! Shows '12/2030'
-        show_percent=True,   # Shows '45%'   
-        empty_char=click.style("░", fg="white", dim=True),      # The 'Solid' look
-        color=True,
-        
-        # color="cyan"         # Because everything looks better in Cyan
-    ) as bar:
-        for file_path in bar:
-            # bar.label = f"Processing {file_path.name[:25]}..."
-            bar.update(0)  # Refresh the bar display without moving the percentage
-            file_path = file_path.resolve()
-            relative_path = file_path.relative_to(folder)
-            target_path = Path(output_base / relative_path).with_suffix(target.ext)
-            target_path.parent.mkdir(parents=True, exist_ok=True)  # Create subfolders!
-            success, error_message = convert_flac_to_apple_friendly(
-                file_path,
-                target,
-                target_path,
-                app_context,
-                bitrate,
-            )
 
-            # Record the result
-            if success:
-                logger.log(
-                    f"\n Success: {file_path.name[:25]} --> {target_path.name[:25]} "
-                )
-            conv_detail = ConversionDetail(
-                source=str(file_path),
-                destination=str(target_path),
-                status="SUCCESS" if success else "FAILED",
-                error_message=None if success else "Codec mismatch or FFmpeg error"
-            )
-            report.add_detail(conv_detail)
+    # conv_report = ConversionReport()
 
-            logger.log(f"{error_message}")
+    # internal_helper
+    def _computer_output_path(file_path: Path) -> Path:
+        file_path = file_path.resolve()
+        relative_path = file_path.relative_to(folder)
+        target_path = Path(output_base / relative_path).with_suffix(target.ext)
+        return target_path
 
+    conv_tasks: List[ConversionTask] = []
+    # 1. Identify all unique folders needed
+    required_dirs = { _computer_output_path(f).parent for f in files }
+
+    # 2. Create them once
+    for d in required_dirs:
+        d.mkdir(parents=True, exist_ok=True)
+
+    # 3. Now the loop only focuses on building Tasks
+    conv_tasks = [
+        ConversionTask(
+            file_path=f,
+            target=target,
+            output_path=_computer_output_path(f),
+            app_context=app_context,
+            bitrate=bitrate, 
+        )
+        for f in files
+    ]
+    # Create a set to keep track of 'Work already done'
+    # created_dirs = set()
+    # for file_path in files:
+    #     target_path = _computer_output_path(file_path=file_path)
+    #     parent_dir = target_path.parent
+
+    #     # ONLY talk to the OS if we haven't seen this folder in this loop
+    #     if parent_dir not in created_dirs:
+    #         parent_dir.mkdir(parents=True, exist_ok=True)
+    #         created_dirs.add(parent_dir)
+    #     # target_path.parent.mkdir(parents=True, exist_ok=True)  # Create subfolders!
+    #     task = ConversionTask(
+    #         file_path=file_path,
+    #         target=target,
+    #         output_path=target_path,
+    #         app_context=app_context,
+    #         bitrate=bitrate,
+    #     )
+    #     conv_tasks.append(task)
+
+    conv_task_results = run_parallel_conversion(conv_tasks)
+    conv_details = [
+        ConversionDetail(
+            str(result.file_path),
+            str(_computer_output_path(result.file_path)),
+            "Success" if result.success else "Failed",
+            result.message,
+        )
+        for result in conv_task_results
+    ]
+    success_count = sum(1 for r in conv_task_results if r.success)
+    total_count = len(conv_task_results)
+    failed_count = total_count - success_count
+    conv_report = ConversionReport(
+        total=total_count,
+        success=success_count,
+        failed = failed_count,details=conv_details
+    )
     logger.stream(f"{div_section_line('Completed',2)}\n")
 
     # Add to results for the JSON
-    logger.stream(format_section("Summary", {"total":report.total, "success":report.success,"failed":report.failed}))
+    logger.stream(
+        format_section(
+            "Summary",
+            {"total": total_count, "success": success_count, "failed": failed_count},
+        )
+    )
     logger.stream(" ")
     logger.stream(f" export dir: {str(output_base)}")
 
@@ -308,10 +331,13 @@ def convert_cmd(
         # create the report dir
         final_dir.mkdir(parents=True, exist_ok=True)
         # rp_success = create_report_for_convert(final_dir, results, logger=app_context.logger)
-        rp_success, err_msg = create_report_for_convert(final_dir, report, logger=app_context.logger)
+        rp_success, err_msg = create_report_for_convert(
+            final_dir, conv_report, logger=app_context.logger
+        )
         logger.stream(
             f" report dir: {str(Path(final_dir).resolve())}",
         )
+
 
 # ----------------
 # SUBCOMMAND 2: stats
@@ -337,7 +363,7 @@ def stats_cmd(
     ctx: click.Context,
     folder: Path,
     report_path: Path,
-    find_duplicate: bool = False, 
+    find_duplicate: bool = False,
 ):
     """Stats Dashboard & Insight tool."""
     if not folder or not folder.is_dir():
@@ -354,7 +380,7 @@ def stats_cmd(
         return (-item[1].count, item[0].lower())
 
     def sort_logic_for_dupls(item: Tuple[str, Union[TypeSummary, DuplicateGroup]]):
-        return (-(item[1].count>1), item[0].lower())
+        return (-(item[1].count > 1), item[0].lower())
 
     def display_width(s: str) -> int:
         # wcswidth returns -1 for some unprintables; treat as 0-width fallback
@@ -431,7 +457,11 @@ def stats_cmd(
         embedded_artwork_pc = f"{safe_division(100 * cnt_embedded_artwork, stats.total_files ):>4.0f} % contains embedded thumbnail or artwork."
         logger.stream(f"{embedded_artwork_pc}\n", bold=True)
     if stats.bloated_files and len(stats.by_bloated):
-        saved_size_mb = 0.3 * stats.by_bloated["bloated"].size_bytes / app_context.app_config.MEGA_BYTES
+        saved_size_mb = (
+            0.3
+            * stats.by_bloated["bloated"].size_bytes
+            / app_context.app_config.MEGA_BYTES
+        )
         saved_size_str = (
             f"{saved_size_mb/1024:.1f} GB"
             if saved_size_mb > 1024
@@ -531,7 +561,8 @@ def stats_cmd(
     # --- 4. Top Genres (Still sorted by count, then A-Z) ---
     if stats.genres:
         logger.stream(
-            f"Top {min(app_config.TOPS,len(stats.genres))} Genres (by file count):", fg="cyan"
+            f"Top {min(app_config.TOPS,len(stats.genres))} Genres (by file count):",
+            fg="cyan",
         )
 
         sub_total_name = "Total # of Genres"
@@ -587,21 +618,20 @@ def stats_cmd(
         sub_total_name = "total # of dupl. groups"
         waste_size_string = "potential waste size to save"
         duplicate_items = [
-        (key, val) for key, val in stats.fingerprints.items() 
-        if val.count > 1
-    ]
+            (key, val) for key, val in stats.fingerprints.items() if val.count > 1
+        ]
         sorted_fps = sorted(duplicate_items, key=sort_logic)
         label_width = (
             # max(
-                max(
-                    (
-                        display_width(duplicate_key)
-                        for duplicate_key, _ in sorted_fps[:min(tops,len(sorted_fps))]
-                    ),
-                    default=0,
-                )
-                # len(sub_total_name),
-                # len(waste_size_string),
+            max(
+                (
+                    display_width(duplicate_key)
+                    for duplicate_key, _ in sorted_fps[: min(tops, len(sorted_fps))]
+                ),
+                default=0,
+            )
+            # len(sub_total_name),
+            # len(waste_size_string),
             # )
         )
         fn_str_width = 40
@@ -612,8 +642,11 @@ def stats_cmd(
 
             for _, data in sorted_fps:
                 total_waste_bytes += data.waste_size
-            sorted_fps = sorted_fps[:min(app_config.TOPS,len(sorted_fps))]
-            logger.stream(f"Top {min(app_config.TOPS,len(sorted_fps))} Possible Duplicate Groups (by file count):", fg="cyan")
+            sorted_fps = sorted_fps[: min(app_config.TOPS, len(sorted_fps))]
+            logger.stream(
+                f"Top {min(app_config.TOPS,len(sorted_fps))} Possible Duplicate Groups (by file count):",
+                fg="cyan",
+            )
             for dp_key, data in sorted_fps:
                 recs = data.records
                 if len(recs) > 1:
@@ -627,7 +660,7 @@ def stats_cmd(
                     )
                 else:
                     sorted_recs = recs
-                selected = min (app_config.TOPS,len(sorted_recs))
+                selected = min(app_config.TOPS, len(sorted_recs))
                 sorted_recs = sorted_recs[:selected]
                 size_mb = data.size_bytes / app_config.MEGA_BYTES
                 size_str = (
@@ -635,16 +668,21 @@ def stats_cmd(
                 )
                 fname_str = ""
                 if sorted_recs:
-                    strs = [("'"+ rec.file_path.name + "'" or "") for rec in sorted_recs if rec]
+                    strs = [
+                        ("'" + rec.file_path.name + "'" or "")
+                        for rec in sorted_recs
+                        if rec
+                    ]
                     fname_str = ", ".join(strs)
 
                 if not fname_str:
-                    fname_str = fname_str 
+                    fname_str = fname_str
                 logger.stream(
                     f"  {ljust_display(dp_key.title(),label_width)} : {data.count:>6,} ({size_str:>8}) "
                 )
                 logger.stream(
-                    f"      |-->  {ljust_display(fname_str,fn_str_width) + ', etc.'}", dim=True,
+                    f"      |-->  {ljust_display(fname_str,fn_str_width) + ', etc.'}",
+                    dim=True,
                 )
 
             logger.stream(
@@ -683,6 +721,7 @@ def check_cmd():
     except click.Abort:
         # ensure_ffmpeg already printed the error, so we just exit
         abort("Command exited unexpectedly.")
+
 
 # ----------------
 # SUBCOMMAND 4: inspect

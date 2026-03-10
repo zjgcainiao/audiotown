@@ -249,11 +249,6 @@ def get_folder_stats(
     # )
     logger.stream(f"{len(all_files):,} Found...", fg="cyan")
 
-    # with ThreadPoolExecutor(max_workers=max_workers) as executor:
-    #     # map() handles distributing the work across threads
-        
-    #     results = list(executor.map(lambda f: probe_file(f, ffprobe_path), all_files))
-
     # for record in results:
     #         # results.update(0)
     #         if record:

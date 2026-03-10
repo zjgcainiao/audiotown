@@ -684,7 +684,6 @@ class ConversionReport:
     start_time: str = field(
         default_factory=lambda: datetime.now().astimezone().isoformat()
     )
-    is_dry_run: bool = False
     total: int = 0
     success: int = 0
     failed: int = 0
@@ -693,7 +692,7 @@ class ConversionReport:
     def add_detail(self, detail: ConversionDetail):
         self.details.append(detail)
         self.total += 1
-        if detail.status == "SUCCESS":
+        if detail.status.upper() == "SUCCESS":
             self.success += 1
         else:
             self.failed += 1
@@ -701,3 +700,20 @@ class ConversionReport:
     def to_dict(self):
         """Converts the whole tree to a dictionary for JSON exporting."""
         return asdict(self)
+
+
+
+# for concurrent running. need a task object to hold each job, aka ConversionTask.
+@dataclass(slots=True)
+class ConversionTask:
+    file_path: Path
+    target: AudioFormat       
+    output_path: Path
+    app_context: AppContext
+    bitrate: str
+
+@dataclass(slots=True)
+class ConversionTaskResult:
+    file_path: Path
+    success: bool = False
+    message: str = ""
