@@ -11,7 +11,6 @@ def size_string(size: int) -> str:
     size_str = f"{size_mb/1024:.1f} GB" if size_mb > 1024 else f"{size_mb:.1f} MB"
     return size_str
 
-
 def safe_division(n1: Union[int, float], n2: Union[int, float]) -> Optional[float]:
     try:
         result = float(n1 / n2)

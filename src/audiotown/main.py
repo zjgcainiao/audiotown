@@ -257,11 +257,9 @@ def convert_cmd(
         files,
         label=styled_label,
         fill_char=styled_char,
-        # label="In progress",
         show_pos=True,       # This is the magic! Shows '12/2030'
-        show_percent=True,   # Shows '45%'
-        # fill_char='█',       # The 'Solid' look
-        empty_char='░',      # The 'Ghost' look
+        show_percent=True,   # Shows '45%'   
+        empty_char=click.style("░", fg="white", dim=True),      # The 'Solid' look
         color=True,
         
         # color="cyan"         # Because everything looks better in Cyan

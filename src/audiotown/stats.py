@@ -266,11 +266,11 @@ def get_folder_stats(
     import click
     with click.progressbar(
             length=len(all_files),
-            label=click.style('Scanning library',fg='cyan',bold=True),
+            label=click.style("Processing files",fg='cyan',bold=True),
             show_percent=True,   # Shows '45%'
             show_pos=True, # Shows [120/13000]
             fill_char=click.style('█',fg='cyan',bold=True),
-            empty_char='░'
+            empty_char=click.style("░", fg="white", dim=True),
         ) as bar:
             
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
