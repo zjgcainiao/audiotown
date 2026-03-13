@@ -232,10 +232,10 @@ def get_folder_stats(
     folder: Path,
     ffprobe_path: str,
     max_workers: int = AppConfig().MAX_WORKERS,
-):
+)-> FolderStats:
     """Gathers technical and metadata stats for a folder."""
 
-    stats = FolderStats()
+    stats = FolderStats(folder_path=folder)
     # Define our 'Music & Audiobook' whitelist
 
     # 1. Collect paths (Fast)

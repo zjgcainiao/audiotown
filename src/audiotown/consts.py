@@ -340,7 +340,7 @@ class DuplicateGroup:
 # ---------------------------
 @dataclass(slots=True)
 class FolderStats:
-    # folder:
+    folder_path: Optional[Path] 
     # records
     records: List[AudioRecord] = field(default_factory=list)
 
