@@ -29,6 +29,7 @@ def get_stream_info(
         return None
     cmd_1 = [
         ffprobe_path,
+        "-hide_banner",
         "-v",
         "quiet",
         "-show_entries",
@@ -114,7 +115,7 @@ def probe_file(file_path: Path, ffprobe_path: str) -> Optional[AudioRecord]:
                 result.append(string)
             return result
 
-        # 2. Robust Extraction
+        # 2. extract sample_rate, bits,codec_name, etc
         sample_rate = int(stream.get("sample_rate", 0))
         raw_bits = int(
             stream.get("bits_per_raw_sample", 0)
@@ -238,9 +239,6 @@ def get_folder_stats(
     stats = FolderStats(folder_path=folder)
     # Define our 'Music & Audiobook' whitelist
 
-    # 1. Collect paths (Fast)
-    # all_files = [f for f in folder.rglob("*") if f.suffix.lower() in SUPPORTED]
-    
     all_files = list(get_audio_files(folder))
     # SUPPORTED = AppConfig().supported_extensions
     # supported_str = ", ".join(SUPPORTED)
@@ -249,15 +247,7 @@ def get_folder_stats(
     # )
     logger.stream(f"{len(all_files):,} Found...", fg="cyan")
 
-    # for record in results:
-    #         # results.update(0)
-    #         if record:
-    #             # The .add() method is your 'Single Source of Truth'
-    #             stats.add(record)
-    #         else:
-    #             # Handle cases where probe_file might return None (though it shouldn't)
-    #             continue
-    # return stats
+
     import click
     with click.progressbar(
             length=len(all_files),

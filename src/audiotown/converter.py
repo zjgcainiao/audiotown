@@ -5,11 +5,22 @@ from typing import Tuple
 from pathlib import Path
 from audiotown.logger import SessionLogger
 from audiotown.logger import logger
-from audiotown.consts import AudioFormat,  BitrateTier, AppContext, AppConfig, ConversionTask, ConversionTaskResult, ConversionDetail, ConversionReport
+from audiotown.consts import (
+    AudioFormat,
+    BitrateTier,
+    AppContext,
+    AppConfig,
+    FFmpegConfig,
+    ConversionTask,
+    ConversionTaskResult,
+    ConversionDetail,
+    ConversionReport,
+)
 from audiotown.utils import find_external_cover
 from audiotown.stats import probe_file
 from typing import List
 from concurrent.futures import ThreadPoolExecutor, as_completed
+
 
 def convert_flac_to_apple_friendly(
     file_path: Path,
@@ -24,9 +35,7 @@ def convert_flac_to_apple_friendly(
     """
     # Apple-friendly format .m4a
     if not target_path:
-        output_path = target_folder.with_suffix(
-            target.ext
-        )  
+        output_path = target_folder.with_suffix(target.ext)
     else:
         output_path = target_path
 
@@ -52,7 +61,8 @@ def convert_flac_to_apple_friendly(
         "-loglevel",
         "error",
         "-y",
-        "-i", str(file_path),
+        "-i",
+        str(file_path),
     ]
     # Add cover input only if it exists
     # Only add cover.jpg as an input if no embedded art is found
@@ -142,12 +152,10 @@ def convert_flac_to_apple_friendly(
     # temp output before the conversion completes
     temp_output = str(output_path) + ".tmp"
 
-
     # 2. Add the '-threads 1' flag to your 'cmd' list
     # This prevents 8 FFmpegs from fighting over the same CPU cores
     cmd.insert(1, "-threads")
     cmd.insert(2, "1")
-
     try:
 
         process = subprocess.Popen(
@@ -155,7 +163,7 @@ def convert_flac_to_apple_friendly(
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,  # Capture stderr (2>)
             text=True,
-            errors='replace'
+            errors="replace",
         )
         # stdout, stderr_data = process.communicate()
         # We wait for the process to finish
@@ -165,7 +173,10 @@ def convert_flac_to_apple_friendly(
             stderr_data = process.stderr.read() if process.stderr else ""
             if os.path.exists(temp_output):
                 os.remove(temp_output)
-            return False, f"FFmpeg Error (Code {process.returncode}): {stderr_data.strip()}"
+            return (
+                False,
+                f"FFmpeg Error (Code {process.returncode}): {stderr_data.strip()}",
+            )
 
         # SUCCESS: Log the stderr because that contains the bitrate/codec info
         if stderr_data:
@@ -186,6 +197,7 @@ def convert_flac_to_apple_friendly(
 # multiple theading helper functions
 # -------------------
 
+
 def convert_task_wrapper(task_data: ConversionTask) -> ConversionTaskResult:
     """
     Unpacks the dict and returns (file_path, success, message)
@@ -198,37 +210,48 @@ def convert_task_wrapper(task_data: ConversionTask) -> ConversionTaskResult:
         task_data.app_context,
         task_data.bitrate,
     )
-    return ConversionTaskResult(file_path, success, msg)
-
+    return ConversionTaskResult(
+        file_path=file_path,
+        output_path=task_data.output_path,
+        success=success,
+        message=msg,
+    )
 
 
 import click
-def run_parallel_conversion(all_tasks: List[ConversionTask]) -> List[ConversionTaskResult]:
+
+
+def run_parallel_conversion(
+    all_tasks: List[ConversionTask],
+) -> List[ConversionTaskResult]:
     """
-    The main engine driver. 
+    The main engine driver.
     Input: A list of ConversionTask dictionaries.
     Output: A list of results (path, success, message).
     """
     results: List[ConversionTaskResult] = []
     max_workers = max(1, (os.cpu_count() or 4) - 1)
-    # this following is a setup for I/O bound while converison is cpu intensive. 
+    # this following is a setup for I/O bound while converison is cpu intensive.
     # max_workers = AppConfig().MAX_WORKERS
     # conv_report = ConversionReport()
-    with click.progressbar(length=len(all_tasks),
-                        label=click.style("In progress", fg="cyan", bold=True),
-                        fill_char=click.style("█", fg="cyan"),
-                        show_pos=True,  # This is the magic! Shows '12/2030'
-                        show_percent=True,  # Shows '45%'
-                        empty_char=click.style("░", fg="white", dim=True),  # The 'Solid' look
-                        color=True,
-                        ) as bar:
+    with click.progressbar(
+        length=len(all_tasks),
+        label=click.style("In progress", fg="cyan", bold=True),
+        fill_char=click.style("█", fg="cyan"),
+        show_pos=True,  # This is the magic! Shows '12/2030'
+        show_percent=True,  # Shows '45%'
+        empty_char=click.style("░", fg="white", dim=True),  # The 'Solid' look
+        color=True,
+    ) as bar:
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             # Submit all tasks at once
-            future_to_path = {executor.submit(convert_task_wrapper, t): t.file_path for t in all_tasks}
+            future_to_path = {
+                executor.submit(convert_task_wrapper, t): t.file_path for t in all_tasks
+            }
 
             for future in as_completed(future_to_path):
                 task_result = future.result()
                 results.append(task_result)
-                bar.update(1) # This makes the bar move smoothly for every file
-                
+                bar.update(1)  # This makes the bar move smoothly for every file
+
     return results

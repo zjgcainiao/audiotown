@@ -1,19 +1,52 @@
 from __future__ import annotations
 import click
 import re
+import shutil
 import json
 import unicodedata
 import os
+import audiotown
+import platform
 from enum import Enum
 from pathlib import Path
 from datetime import datetime
-from dataclasses import dataclass, field, asdict
-from typing import Optional, Tuple, Dict, List, Any, cast, Set
+from dataclasses import dataclass, field, asdict, is_dataclass
+from typing import Optional, Tuple, Dict, List, Any, cast, Set, DefaultDict
 from collections import Counter, defaultdict
 from functools import partial
-from audiotown.utils import to_int, div_blocks
+from audiotown.utils import to_int, div_blocks, extract_year_from_str, sanitize_metadata
 from audiotown.logger import SessionLogger
 
+
+# @dataclass(frozen=True, slots=True)
+# class AudioReadable:
+#     readable = "readable"
+#     unreadable = "unreadable"
+
+
+class AudioReadable(str, Enum):
+    READABLE = "readable"
+    UNREADABLE = "unreadable"
+    
+    @classmethod
+    def get_value(cls, key: str) -> str:
+        # Allows you to look up "high" and get "320k" safely
+        return cls[key.upper()].value
+
+    @classmethod
+    def from_str(cls, label: str):
+        """Safely find a tier by string, case-insensitive."""
+        try:
+            return cls[label.upper()]
+        except (KeyError, AttributeError):
+            return None  # Or return cls.MEDIUM as a safe fallback
+
+    @classmethod
+    def supported_bitrates(cls) -> set[str]:
+        # Allows you to look up "high" and get "320k" safely
+
+        a_set = {member.value for member in cls}
+        return a_set
 
 class BitrateTier(str, Enum):
     HIGH = "320k"
@@ -45,6 +78,15 @@ class BitrateTier(str, Enum):
 class TypeSummary:
     count: int = 0
     size_bytes: int = 0
+
+    def __add__(self, other: "TypeSummary") -> "TypeSummary":
+        """Magic method to allow: total = summary_a + summary_b"""
+        if not isinstance(other, TypeSummary):
+            return self
+        return TypeSummary(
+            count=self.count + other.count,
+            size_bytes=self.size_bytes + other.size_bytes,
+        )
 
 
 @dataclass(slots=True)
@@ -159,10 +201,50 @@ class AudioFormat(Enum):
 
 
 # --- FFmpegConfig ---
+# import shutil
+# @dataclass(frozen=True)
+# class FFmpegConfig:
+#     ffmpeg_path: str = field(default_factory=lambda: shutil.which("ffmpeg"))
+#     ffprobe_path: str= field(default_factory=lambda: shutil.which("ffprobe"))
+
+#     @staticmethod
+#     def get_ffmpeg_path():
+#         ffmpeg_path = shutil.which("ffmpeg")
+#         return ffmpeg_path or None
+#     @staticmethod
+#     def get_ffprobe_path():
+#         ffprobe_path = shutil.which("ffprobe")
+#         return ffprobe_path or None
+
+
 @dataclass(frozen=True)
 class FFmpegConfig:
-    ffmpeg_path: str
-    ffprobe_path: str
+    """
+    Frozen configuration for FFmpeg and ffprobe executables.
+    Defaults to system PATH lookup via shutil.which().
+    """
+
+    ffmpeg_path: Optional[str] = field(default_factory=lambda: shutil.which("ffmpeg"))
+    ffprobe_path: Optional[str] = field(default_factory=lambda: shutil.which("ffprobe"))
+
+    def __post_init__(self):
+        # Optional: warn or raise if paths are missing (uncomment if desired)
+        # if self.ffmpeg_path is None:
+        #     raise ValueError("ffmpeg not found in PATH")
+        # if self.ffprobe_path is None:
+        #     raise ValueError("ffprobe not found in PATH")
+        pass
+
+    @property
+    def is_complete(self) -> bool:
+        """True if both executables were found."""
+        return self.ffmpeg_path is not None and self.ffprobe_path is not None
+
+    def __str__(self) -> str:
+        return (
+            f"FFmpegConfig(ffmpeg={self.ffmpeg_path or 'not found'}, "
+            f"ffprobe={self.ffprobe_path or 'not found'})"
+        )
 
 
 @dataclass(slots=True)
@@ -239,6 +321,15 @@ class AudioRecord:
         return self.audio_format.is_lossy
 
     def is_hires_lossless(self) -> bool:
+        """ determines if the audio is high resolution lossless
+        criteria: 
+            - is lossless.
+            - need to meet one of the two
+                - bit_per_sample>24, or 
+                - sample_rate > 48000
+        Returns:
+            bool: True or False
+        """
         if self.audio_format.is_lossy:
             return False
         bits = self.bits_per_sample
@@ -250,20 +341,31 @@ class AudioRecord:
         return is_high_res
 
     def is_cd_lossless(self) -> bool:
+        """ determines if the audio is high resolution lossless
+        criteria: 
+            - is lossless.
+            - bits_per_sample = 16
+            - sample_rate (44.1Khz and 48 Khz)
+            - sample_rate > 48000
+        Returns:
+            bool: True or False
+        """
+
+
         if self.audio_format.is_lossy:
             return False
         bits = self.bits_per_sample
         sr = self.sample_rate_hz
         return bits == 16 and (sr in (44100, 48000) if sr is not None else False)
 
-    def lossy_bitrate_band(self) -> QualityTier:
+    def lossy_bitrate_band(self) -> Optional[QualityTier]:
         """
         Simple, conservative tiering.
         You can refine per-codec thresholds later (Opus vs MP3 vs AAC).
         """
         if not self.audio_format.is_lossy:
-            return QualityTier.UNKNOWN
-
+            return None
+        # calc bit_rate
         br = self.bitrate_kbps
         if br is None or br <= 0:
             return QualityTier.LOSSY_UNKNOWN
@@ -275,13 +377,13 @@ class AudioRecord:
             return QualityTier.LOSSY_STANDARD
         return QualityTier.LOSSY_LOW
 
+ 
     def quality_tier(self) -> QualityTier:
         """
         The one function you call everywhere.
         """
         if not self.readable:
             return QualityTier.UNKNOWN
-
         fam = self.family()
         if fam == AudioFamily.LOSSLESS:
             if self.is_hires_lossless():
@@ -291,13 +393,24 @@ class AudioRecord:
             return QualityTier.LOSSLESS_OTHER
 
         if fam == AudioFamily.LOSSY:
-            return self.lossy_bitrate_band()
+            # return self.lossy_bitrate_band()
+            # calc bit_rate
+            br = self.bitrate_kbps
+            if br is None or br <= 0:
+                return QualityTier.LOSSY_UNKNOWN
+
+            # baseline thresholds; tweak as desired
+            if br >= 256:
+                return QualityTier.LOSSY_HIGH
+            if br >= 160:
+                return QualityTier.LOSSY_STANDARD
+            return QualityTier.LOSSY_LOW
 
         return QualityTier.UNKNOWN
 
     def is_storage_inefficient(self) -> bool:
         """
-        Optional: flag “big-for-what-it-is”.
+        Optional: flag “big-for-what-it-is” PCM raw sample.
         Example heuristics:
           - 32-bit float PCM for a music library (not wrong, but huge)
           - very high sample rates (192k) in PCM could be huge too
@@ -305,9 +418,10 @@ class AudioRecord:
         if self.is_lossy():
             return False
         bits = self.bits_per_sample or 0
+        s_rate = self.sample_rate_hz or 0
         if self.is_pcm() and bits > 24:
             return True
-        if self.is_pcm() and self.sample_rate_hz or 0 > 192 * 1000:
+        if self.is_pcm() and s_rate or 0 > 192 * 1000:
             return True
         return False
 
@@ -340,7 +454,7 @@ class DuplicateGroup:
 # ---------------------------
 @dataclass(slots=True)
 class FolderStats:
-    folder_path: Optional[Path] 
+    folder_path: Optional[Path]
     # records
     records: List[AudioRecord] = field(default_factory=list)
 
@@ -355,14 +469,9 @@ class FolderStats:
     missing_album: int = 0
     missing_title: int = 0
 
-    # lossy bitrate bands
-    lossy_band_counts: Counter[str] = field(
-        default_factory=Counter
-    )  # high/standard/low/unknown
-    lossy_band_bytes: defaultdict[str, int] = field(
-        default_factory=partial(defaultdict, int)
+    by_lossy_band: DefaultDict[str, TypeSummary] = field(
+        default_factory=partial(DefaultDict, TypeSummary)
     )
-
     #
     by_readable: defaultdict[str, TypeSummary] = field(
         default_factory=partial(defaultdict, TypeSummary)
@@ -421,7 +530,8 @@ class FolderStats:
             (self.by_ext, rec.audio_format.ext),
             (self.by_codec, rec.audio_format.codec_name),
             (self.by_family, rec.family()),
-            (self.by_tier, rec.quality_tier()),
+            (self.by_tier,  rec.quality_tier().value),
+            (self.by_lossy_band, rec.lossy_bitrate_band().value if rec.lossy_bitrate_band() else "non lossy")
         ):
             self._bump(table, key, size)
 
@@ -440,12 +550,13 @@ class FolderStats:
         if not rec.title:
             self.missing_title += 1
         if rec.artist:
-            if rec.artist == AudioFamily.UNKNOWN.value:
+            if rec.artist.casefold() == AudioFamily.UNKNOWN.value:
                 self.missing_artist += 1
             else:
                 self._bump(self.artists, rec.artist, size)
+        else:
+            self.missing_artist += 1
 
-        # if rec.album:
         if not rec.album:
             self.missing_album += 1
         else:
@@ -453,8 +564,9 @@ class FolderStats:
         if rec.genre:
             self._bump(self.genres, rec.genre, size)
 
-        if rec.year and to_int(rec.year) > 1900:
-            self._bump(self.years, rec.year, size)
+        extracted_year = extract_year_from_str(rec.year or "")
+        if extracted_year:
+            self._bump(self.years, str(extracted_year), size)
 
         if rec.has_embedded_artwork:
             self._bump(self.by_has_embedded_artwork, "has_embedded_artwork", size)
@@ -462,14 +574,11 @@ class FolderStats:
         # duplicate fingerprint
         fp = rec.fingerprint
         if fp:
-            meta_key = self._normalize_key(rec.fingerprint) if rec.fingerprint else None
-
-            # Key B: The Filename (Stem only, ignore extension)
+            meta_key = self._normalize_key(rec.fingerprint) if rec.fingerprint else ""
+            meta_key = sanitize_metadata(meta_key )
             # e.g., "01. Hotel California.mp3" -> "01 hotel california"
             name_key = self._normalize_key(rec.file_path.stem)
-
-            # We "Bucket" it under both. If the metadata is missing, name_key saves us.
-            # If the filename is "Track 01" but metadata is correct, meta_key saves us.
+            name_key = sanitize_metadata(meta_key)
             primary_key = meta_key if meta_key and len(meta_key) > 3 else name_key
             # refined_fp = self._normalize_key(fp)
             self._bump2(self.fingerprints, primary_key, size, rec)
@@ -545,26 +654,60 @@ class FolderStats:
                 results.append(DuplicateGroup(key=key, records=sorted_recs))
         return results
 
+    # @classmethod
+    # def aggregate(cls, stats_list: List['FolderStats']) -> 'FolderStats':
+    #     """Creates a new FolderStats that is the sum / merge of many"""
+    #     if not stats_list:
+    #         return cls()  # empty / zero stats
+
+    #     aggregated = cls(
+    #         total_tracks=sum(s.total_tracks for s in stats_list),
+    #         total_size_bytes=sum(s.total_size_bytes for s in stats_list),
+    #         # last_scanned = max(...) or None or datetime.now() — decide your rule
+    #     )
+
+    #     # Merge all dict-of-counters (most common case)
+    #     from collections import Counter
+
+    #     def merge_counters(*counters):
+    #         total = Counter()
+    #         for c in counters:
+    #             total.update(c)
+    #         return dict(total)
+
+    #     aggregated.by_ext     = merge_counters(*(s.by_ext    for s in stats_list))
+    #     aggregated.by_codec   = merge_counters(*(s.by_codec  for s in stats_list))
+    #     aggregated.by_family  = merge_counters(*(s.by_family for s in stats_list))
+    #     # ... do the same for by_tier, by_year, by_artist, etc.
+
 
 class AudiotownEncoder(json.JSONEncoder):
-    def default(self, o):
+    def default(self, obj):
         # If the object is a Path (PosixPath or WindowsPath), turn it into a string
-        if isinstance(o, Path):
-            return str(o)
-        if isinstance(o, AudioFormat):
+        if isinstance(obj, Path):
+            return str(obj)
+        # 2. All dataclasses (including DuplicateGroup, TypeSummary, AudioRecord, …)
+        if is_dataclass(obj) and not isinstance(obj, type):
+            return asdict(obj)
+        if isinstance(obj, AudioFormat):
             return {
-                "ext": o.ext,
-                "codec_name": o.codec_name,
-                "encoder": o.encoder,
-                "is_lossy": o.is_lossy,
-                "description": o.description,
+                "ext": obj.ext,
+                "codec_name": obj.codec_name,
+                "encoder": obj.encoder,
+                "is_lossy": obj.is_lossy,
+                "description": obj.description,
             }
+        if isinstance(obj, (Counter, defaultdict)):
+            return dict(obj)
+        if isinstance(obj, TypeSummary):
+            return {"count": obj.count, "size_bytes": obj.size_bytes}
+            # return obj.to_dict() if hasattr(obj, "to_dict") else vars(obj)
+
+        if hasattr(obj, "__dict__"):
+            # print(f"obj: {obj}. type: {type(obj)}")
+            return vars(obj)
         # Otherwise, let the standard encoder handle it
-        return super().default(o)
-
-
-import audiotown
-import platform
+        return super().default(obj)
 
 
 @dataclass(frozen=True, slots=True)
@@ -625,7 +768,7 @@ class AppContext:
     app_config: AppConfig = field(default_factory=AppConfig)
     start_time: float = 0
     run_time: float = 0
-    ff_config: Optional[FFmpegConfig] = None
+    ff_config: Optional[FFmpegConfig] = field(default_factory=FFmpegConfig)
     logger: SessionLogger = field(default_factory=SessionLogger)
     dry_run: bool = False
     verbose: bool = False
@@ -681,6 +824,7 @@ class ConversionDetail:
 
 @dataclass(slots=True)
 class ConversionReport:
+    folder_path: Path
     start_time: str = field(
         default_factory=lambda: datetime.now().astimezone().isoformat()
     )
@@ -688,6 +832,7 @@ class ConversionReport:
     success: int = 0
     failed: int = 0
     details: List[ConversionDetail] = field(default_factory=list)
+    run_time: float = 0.0
 
     def add_detail(self, detail: ConversionDetail):
         self.details.append(detail)
@@ -702,18 +847,19 @@ class ConversionReport:
         return asdict(self)
 
 
-
 # for concurrent running. need a task object to hold each job, aka ConversionTask.
 @dataclass(slots=True)
 class ConversionTask:
     file_path: Path
-    target: AudioFormat       
+    target: AudioFormat
     output_path: Path
     app_context: AppContext
     bitrate: str
 
+
 @dataclass(slots=True)
 class ConversionTaskResult:
     file_path: Path
+    output_path: Path
     success: bool = False
     message: str = ""

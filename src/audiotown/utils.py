@@ -3,6 +3,65 @@ from typing import Optional
 from audiotown.logger import logger
 import unicodedata
 from typing import Optional, Union
+from datetime import datetime
+
+def extract_year_from_str(value: str) -> Optional[int]:
+    """
+    Try to extract a 4-digit year from various messy formats.
+    Returns None if no valid year found or out of reasonable range.
+    """
+    if not value or not isinstance(value, str):
+        return None
+
+    current_year = datetime.now().year
+
+    # Try common patterns
+    for fmt in [
+        "%Y", "%y", "%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y",
+        "%Y.%m.%d", "%d.%m.%Y", "%Y %m %d", "%b %d, %Y"
+    ]:
+        try:
+            dt = datetime.strptime(value.strip(), fmt)
+            year = dt.year
+            if 1900 <= year <= current_year + 5:
+                return year
+        except ValueError:
+            continue
+
+    # Fallback: look for any 4 consecutive digits in the string
+    import re
+    match = re.search(r'\b(19\d{2}|20\d{2})\b', value)
+    if match:
+        year = int(match.group(1))
+        if 1900 <= year <= current_year + 5:
+            return year
+
+    return None
+
+
+def duration_string(duration: float) -> str:
+    """genrate a human friendly format based on duration in seconds.
+        Output will look like 20 mins, 30.5 hours, 30.0 days  or 1.2 years
+    Args:
+        duration (float): duration in seconds
+
+    Returns:
+        str: the human friendly string format
+    """
+    SECS_PER_HOUR = 60 * 60
+    SECS_PER_DAY = 24 * SECS_PER_HOUR
+
+    if duration <= 0:
+        return ""
+    elif duration < SECS_PER_HOUR:
+        string = f"{duration/ SECS_PER_HOUR:,.1f} mins"
+    elif duration < 100 * SECS_PER_HOUR:
+        string = f"{duration/ SECS_PER_HOUR:,.1f} hours"
+    elif duration < 400 * SECS_PER_DAY:
+        string = f"{duration/ SECS_PER_DAY:,.1f} days"
+    else:
+        string = f"{duration/ SECS_PER_DAY:,.1f} years"
+    return string
 
 
 def size_string(size: int) -> str:
@@ -10,6 +69,7 @@ def size_string(size: int) -> str:
     size_mb = size / 1024**2
     size_str = f"{size_mb/1024:.1f} GB" if size_mb > 1024 else f"{size_mb:.1f} MB"
     return size_str
+
 
 def safe_division(n1: Union[int, float], n2: Union[int, float]) -> Optional[float]:
     try:
@@ -127,13 +187,11 @@ from dataclasses import fields
 import csv
 from typing import List, TypeVar, Type
 
-T = TypeVar('T')
+T = TypeVar("T")
+
 
 def dataclasses_to_csv(
-    items: List[T],
-    dataclass_type: Type[T],
-    filename: Path,
-    encoding: str = 'utf-8'
+    items: List[T], dataclass_type: Type[T], filename: Path, encoding: str = "utf-8"
 ) -> None:
     """
     Write list of dataclass instances to CSV.
@@ -141,14 +199,14 @@ def dataclasses_to_csv(
     """
     if not items:
         # Create empty file with header or just skip
-        with open(filename, 'w', newline='', encoding=encoding) as f:
+        with open(filename, "w", newline="", encoding=encoding) as f:
             writer = csv.writer(f)
             writer.writerow([f.name for f in fields(dataclass_type)])
         return
 
     fieldnames = [f.name for f in fields(items[0])]
 
-    with open(filename, 'w', newline='', encoding=encoding) as f:
+    with open(filename, "w", newline="", encoding=encoding) as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
 
