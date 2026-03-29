@@ -1,16 +1,20 @@
 # Summary
+
 ## A lightweight, high-performance CLI for managing audio libraries. Optimized for FLAC to Apple-friendly (ALAC/AAC) conversion with smart deduplication.
-1. Optimized for FLAC-to-Apple-friendly conversion, Audiotown scans large music folders quickly, summarizes what is in your collection, and converts `.flac `files into .m4a using either ALAC (lossless) or AAC (lossy). [know more about the codec](https://ffmpeg.org/ffmpeg-codecs.html).
+
+1. Optimized for FLAC-to-Apple-friendly conversion, Audiotown scans large music folders quickly, summarizes what is in your collection, and converts `.flac `files into .m4a using either `ALAC` (lossless) or `AAC` (lossy). [know more about the codec](https://ffmpeg.org/ffmpeg-codecs.html).
 2. It preserves important metadata during conversion, including artist, album, track information, and embedded artwork.
 3. In practical use, it can scan a folder with roughly 13,000 files in about 50-60 seconds, making it suitable for large personal libraries.
-- if you are interested in a MacOS app that 
+
 ## Prefer a Mac app instead?
+
 If you are interested in a native macOS app for this workflow, check out Audiotown Pro.
-It brings the same core idea into a dedicated desktop experience: scan your library, inspect what is in it, and convert .flac files into Apple-friendly .m4a audio with ALAC or AAC, while preserving metadata and artwork from the original files.
+It brings the same core idea into a dedicated desktop experience: scan your library, inspect what is in it, and convert .flac files into Apple-friendly `.m4a` audio with `ALAC` or `AAC`, while preserving metadata and artwork from the original files.
 
 [Learn more about Audiotown Pro](https://holleratme.gumroad.com/l/dclqyl)
 
 # CLI Commands
+
 1. `audiotown` contains three commands: `check`, `stats` and `convert`. This package requires `ffmepg` installed in the system. 
    1. To run them, type `auditown check` or `audio stats` or `audio convert`.
    2. Type `audiotown check` to run `check`. 

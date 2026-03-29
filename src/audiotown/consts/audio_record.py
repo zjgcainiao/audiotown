@@ -1,0 +1,185 @@
+
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Optional
+from .audio_family import AudioFamily
+from .audio_format import AudioFormat
+from .quality_tier import QualityTier
+
+@dataclass(slots=True)
+class AudioRecord:
+    file_path: Path
+    # common technical fields
+    audio_format: AudioFormat  # includes ext, and codec
+
+    # common tags (what you aggregate on)
+    year: Optional[str]
+    artist: Optional[str]
+    album: Optional[str]
+    title: Optional[str]
+    genre: Optional[str]
+    track: Optional[str]
+
+    bitrate_bps: Optional[int] = 0
+    sample_rate_hz: Optional[int] = 0
+    bits_per_sample: Optional[int] = 0
+    channels: Optional[int] = 0
+    size_bytes: int = 0
+    duration_sec: Optional[float] = 0
+
+    # status
+    readable: bool = field(default=True)
+    error: Optional[str] = ""
+    fingerprint: Optional[str] = " _ "  # Calculated at creation
+
+    # default
+    has_embedded_artwork: bool = field(default=False)
+
+    @property
+    def custom_fingerprint(self) -> Optional[str]:
+        """
+        Duplicate heuristic:
+        - normalized artist + title
+        - only returns if both exist
+        """
+        if not self.artist or not self.title:
+            return None
+        a = self.artist.casefold()
+        t = self.title.casefold()
+        # if not a or not t:
+        #     return None
+        return f"{a}" + "_" + f"{t}"
+
+    @property
+    def bitrate_kbps(self) -> Optional[float]:
+        return int(self.bitrate_bps) / 1000 if self.bitrate_bps else 0
+
+    @property
+    def sample_rate_khz(self) -> Optional[float]:
+        return int(self.sample_rate_hz) / 1000 if self.sample_rate_hz else 0
+
+    def family(self) -> AudioFamily:
+        if not self.readable:
+            return AudioFamily.UNKNOWN
+
+        if not self.audio_format.is_lossy:
+            return AudioFamily.LOSSLESS
+        if self.audio_format.is_lossy:
+            return AudioFamily.LOSSY
+        # containers can confuse people; codec_name should be a stream codec,
+        # but keep a safe fallback:
+        return AudioFamily.UNKNOWN
+
+    def is_pcm(self) -> bool:
+        return self.audio_format.is_pcm
+
+    def is_lossless(self) -> bool:
+        return self.audio_format.is_lossless
+
+    def is_lossy(self) -> bool:
+        return self.audio_format.is_lossy
+
+    def is_hires_lossless(self) -> bool:
+        """ determines if the audio is high resolution lossless
+        criteria: 
+            - is lossless.
+            - need to meet one of the two
+                - bit_per_sample>24, or 
+                - sample_rate > 48000
+        Returns:
+            bool: True or False
+        """
+        if self.audio_format.is_lossy:
+            return False
+        bits = self.bits_per_sample
+        sr = self.sample_rate_hz
+        #  “hi-res” definition: >=24-bit OR >48kHz
+        is_high_res: bool = (bits is not None and bits >= 24) or (
+            sr is not None and sr > 48000
+        )
+        return is_high_res
+
+    def is_cd_lossless(self) -> bool:
+        """ determines if the audio is high resolution lossless
+        criteria: 
+            - is lossless.
+            - bits_per_sample = 16
+            - sample_rate (44.1Khz and 48 Khz)
+            - sample_rate > 48000
+        Returns:
+            bool: True or False
+        """
+
+
+        if self.audio_format.is_lossy:
+            return False
+        bits = self.bits_per_sample
+        sr = self.sample_rate_hz
+        return bits == 16 and (sr in (44100, 48000) if sr is not None else False)
+
+    def lossy_bitrate_band(self) -> Optional[QualityTier]:
+        """
+        Simple, conservative tiering.
+        You can refine per-codec thresholds later (Opus vs MP3 vs AAC).
+        """
+        if not self.audio_format.is_lossy:
+            return None
+        # calc bit_rate
+        br = self.bitrate_kbps
+        if br is None or br <= 0:
+            return QualityTier.LOSSY_UNKNOWN
+
+        # baseline thresholds; tweak as desired
+        if br >= 256:
+            return QualityTier.LOSSY_HIGH
+        if br >= 160:
+            return QualityTier.LOSSY_STANDARD
+        return QualityTier.LOSSY_LOW
+
+ 
+    def quality_tier(self) -> QualityTier:
+        """
+        The one function you call everywhere.
+        """
+        if not self.readable:
+            return QualityTier.UNKNOWN
+        fam = self.family()
+        if fam == AudioFamily.LOSSLESS:
+            if self.is_hires_lossless():
+                return QualityTier.LOSSLESS_HIRES
+            if self.is_cd_lossless():
+                return QualityTier.LOSSLESS_CD
+            return QualityTier.LOSSLESS_OTHER
+
+        if fam == AudioFamily.LOSSY:
+            # return self.lossy_bitrate_band()
+            # calc bit_rate
+            br = self.bitrate_kbps
+            if br is None or br <= 0:
+                return QualityTier.LOSSY_UNKNOWN
+
+            # baseline thresholds; tweak as desired
+            if br >= 256:
+                return QualityTier.LOSSY_HIGH
+            if br >= 160:
+                return QualityTier.LOSSY_STANDARD
+            return QualityTier.LOSSY_LOW
+
+        return QualityTier.UNKNOWN
+
+    def is_storage_inefficient(self) -> bool:
+        """
+        Optional: flag “big-for-what-it-is” PCM raw sample.
+        Example heuristics:
+          - 32-bit float PCM for a music library (not wrong, but huge)
+          - very high sample rates (192k) in PCM could be huge too
+        """
+        if self.is_lossy():
+            return False
+        bits = self.bits_per_sample or 0
+        s_rate = self.sample_rate_hz or 0
+        if self.is_pcm() and bits > 24:
+            return True
+        if self.is_pcm() and s_rate or 0 > 192 * 1000:
+            return True
+        return False
