@@ -26,7 +26,21 @@ class FFmpegConfig:
     def is_complete(self) -> bool:
         """True if both executables were found."""
         return self.ffmpeg_path is not None and self.ffprobe_path is not None
+    
 
+    def require_ffmpeg(self) -> str:
+        if self.ffmpeg_path is None:
+            raise RuntimeError("ffmpeg not found in PATH")
+        return self.ffmpeg_path
+
+    def require_ffprobe(self) -> str:
+        if self.ffprobe_path is None:
+            raise RuntimeError("ffprobe not found in PATH")
+        return self.ffprobe_path
+
+    def require_both(self) -> tuple[str, str]:
+        return self.require_ffmpeg(), self.require_ffprobe()
+    
     def __str__(self) -> str:
         return (
             f"FFmpegConfig(ffmpeg={self.ffmpeg_path or 'not found'}, "

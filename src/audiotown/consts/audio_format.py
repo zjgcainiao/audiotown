@@ -23,6 +23,7 @@ class AudioFormat(Enum):
     def __init__(
         self, ext: str, codec_name: str, encoder: str, is_lossy: bool, description: str
     ):
+        # self.value = ext
         self.ext = ext
         self.codec_name = (
             codec_name  # matching `codec_name` from ffprobe -of json output
@@ -34,7 +35,7 @@ class AudioFormat(Enum):
     @classmethod
     def from_suffix(cls, suffix: str) -> AudioFormat | None:
         """Find the default format for a given suffix (e.g. .m4a -> ALAC)."""
-        suffix = suffix.lower()
+        suffix = suffix.strip().lower()
         for member in cls:
             if member.ext == suffix:
                 return member
@@ -43,21 +44,26 @@ class AudioFormat(Enum):
     @classmethod
     def from_codec(cls, codec_name: str) -> Optional[AudioFormat]:
         """Find the default format based on a codec string."""
+        codec_name = codec_name.strip().lower()
         for member in cls:
-            if member.codec_name == codec_name.lower():
+            if member.codec_name == codec_name:
                 return member
         return None
 
     @classmethod
-    def is_supported(cls, suffix: str):
-        if suffix and suffix.strip() and suffix in {member.ext for member in cls}:
-            return True
-        return False
+    def is_supported(cls, suffix: str| None):
+        if not suffix:
+            return False
+        return suffix.strip().lower() in {member.ext for member in cls}
 
     @classmethod
     def supported_extensions(cls) -> set[str]:
         """Returns all unique extensions we care about for scanning."""
         return {member.ext for member in cls}
+    
+    @classmethod
+    def codec_choices(cls) -> list[str]:
+        return [cls.ALAC.codec_name, cls.AAC.codec_name]
 
     @property
     def is_pcm(self) -> bool:

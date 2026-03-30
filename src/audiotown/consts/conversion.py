@@ -3,8 +3,7 @@ from datetime import datetime
 from typing import Optional, List
 from pathlib import Path
 from .audio_format import AudioFormat
-from .app_context import AppContext
-
+from audiotown.utils import make_json_safe
 # -----------------------------
 # Conversion Report Structure
 # -----------------------------
@@ -38,7 +37,11 @@ class ConversionReport:
 
     def to_dict(self):
         """Converts the whole tree to a dictionary for JSON exporting."""
-        return asdict(self)
+        data = asdict(self)
+        # data["folder_path"] = str(self.folder_path)
+        safe_data = make_json_safe(data)
+        return safe_data
+        # return asdict(self)
 
 
 # for concurrent running. need a task object to hold each job, aka ConversionTask.
@@ -47,7 +50,7 @@ class ConversionTask:
     file_path: Path
     target: AudioFormat
     output_path: Path
-    app_context: AppContext
+    # app_context: AppContext
     bitrate: str
 
 

@@ -1,6 +1,7 @@
-from enum import Enum, StrEnum
+from enum import StrEnum
 
-class QualityTier(str, Enum):
+
+class QualityTier(StrEnum):
     LOSSLESS_HIRES = "lossless_hires"
     LOSSLESS_CD = "lossless_cd"
     LOSSLESS_OTHER = "lossless_other"

@@ -6,18 +6,46 @@ from audiotown.logger import SessionLogger
 from .app_config import AppConfig
 from .meta_content import MetaContent
 from .ffmpeg_config import FFmpegConfig
-
+from audiotown.services.probe_service import ProbeService
+from audiotown.services.scan_service import ScanService
+from audiotown.services import ConvertService
+from pathlib import Path
 
 @dataclass(slots=True)
 class AppContext:
     app_config: AppConfig = field(default_factory=AppConfig)
-    start_time: float = 0
-    run_time: float = 0
-    ff_config: Optional[FFmpegConfig] = field(default_factory=FFmpegConfig)
+    start_time: float = 0.0
+    run_time: float = 0.0
+    ff_config: FFmpegConfig = field(default_factory=FFmpegConfig)
     logger: SessionLogger = field(default_factory=SessionLogger)
     dry_run: bool = False
     verbose: bool = False
     meta_content: MetaContent = field(default_factory=MetaContent)
+    report_path: Path | None = None
+
+
+    def get_probe_service(self) -> ProbeService:
+        return ProbeService(
+            ffprobe_path=self.ff_config.require_ffprobe(),
+        )
+
+
+    def get_scan_service(self) -> ScanService:
+        return ScanService(
+            probe_service=self.get_probe_service(),
+        )
+    
+    def get_convert_service(self) -> ConvertService:
+        ffmpeg_path, ffprobe_path = self.ff_config.require_both()
+        return ConvertService(
+            ffmpeg_path=ffmpeg_path,
+            ffprobe_path=ffprobe_path,
+            logger=self.logger,
+            probe_service=self.get_probe_service(),
+            supported_bitrates=self.app_config.supported_bitrates,
+            dry_run=self.dry_run,
+            verbose=self.verbose,
+        )
 
     @classmethod
     def get_app_ctx(cls, ctx: click.Context) -> AppContext:
@@ -27,11 +55,12 @@ class AppContext:
     @classmethod
     def ensure_app_ctx(cls, ctx: click.Context) -> AppContext:
         if ctx.obj is None:
-            ctx.obj = AppContext(
-                start_time=0.0,
-                run_time=0,
-                app_config=AppConfig(),
-                ff_config=None,
-                logger=SessionLogger(),
-            )
+             ctx.obj = cls()
+            # ctx.obj = AppContext(
+            #     start_time=0.0,
+            #     run_time=0.0,
+            #     app_config=AppConfig(),
+            #     ff_config=FFmpegConfig(),
+            #     logger=SessionLogger(),
+            # )
         return cls.get_app_ctx(ctx)

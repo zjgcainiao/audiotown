@@ -14,15 +14,16 @@ from audiotown.utils import (
     safe_division,
     to_int,
     size_string,
+    duration_string,
 )
-from audiotown.converter import convert_flac_to_apple_friendly, run_parallel_conversion
-from audiotown.stats import get_folder_stats, get_audio_files
+
+from audiotown.consts.app_context import AppContext
 from audiotown.consts import (
     AudioFormat,
     FFmpegConfig,
     BitrateTier,
     AppConfig,
-    AppContext,
+
     TypeSummary,
     DuplicateGroup,
     CmdArgsConfig,
@@ -33,6 +34,8 @@ from audiotown.consts import (
 )
 from audiotown.logger import logger, SessionLogger
 from audiotown.report import create_report_for_convert, generate_report_for_stats
+from audiotown.services.scan_service import ScanService
+from audiotown.services.convert_service import ConvertService
 
 app_config = AppConfig()
 app_context = AppContext(
@@ -48,7 +51,8 @@ def abort(message: str, code: int = 1) -> NoReturn:
 
 
 def ensure_ffmpeg() -> Tuple[str, str]:
-    """Checks for ffmpeg and offers to install it via 'Homebrew' if missing."""
+    """Checks for ffmpeg  & ffprobe and offers to install them via 'Homebrew' if missing.
+    handles CLI startup/install flow. """
     ffmpeg_path: Optional[str]
     ffprobe_path: Optional[str]
 
@@ -103,21 +107,30 @@ def cli_runner(ctx: click.Context):
 
     """
     # 1. SETUP: This runs BEFORE any subcommand
-    ctx.ensure_object(dict)
-    # ctx.ensure_object(AppContext)
-    ctx.obj["start_time"] = time.perf_counter()
-    divs_lvl1 = app_config.divs_lvl1
+    # ctx.ensure_object(dict)
+    # # ctx.ensure_object(AppContext)
+    # ctx.obj["start_time"] = time.perf_counter()
+    # divs_lvl1 = app_config.divs_lvl1
 
+    # logger.stream(f"{divs_lvl1} Audiotown CLI Starting {divs_lvl1}", bold=True)
+    # ffpmeg_path, ffprobe_path = ensure_ffmpeg()
+    # ff_config: FFmpegConfig = FFmpegConfig(ffpmeg_path, ffprobe_path)
+    # if not ff_config:
+    #     abort("Missing Dependencies. Exited unexpected.")
+    # app_context.ff_config = ff_config
+
+    # # ctx.obj["app_config"]= app_config
+    # ctx.obj = app_context
+    app_ctx = AppContext.ensure_app_ctx(ctx)
+    app_ctx.start_time = time.perf_counter()
+
+    divs_lvl1 = app_ctx.app_config.divs_lvl1
+    
     logger.stream(f"{divs_lvl1} Audiotown CLI Starting {divs_lvl1}", bold=True)
-    ffpmeg_path, ffprobe_path = ensure_ffmpeg()
-    ff_config: FFmpegConfig = FFmpegConfig(ffpmeg_path, ffprobe_path)
-    if not ff_config:
-        abort("Missing Dependencies. Exited unexpected.")
-    app_context.ff_config = ff_config
+    ffmpeg_path, ffprobe_path = ensure_ffmpeg()
 
-    # ctx.obj["app_config"]= app_config
-    ctx.obj = app_context
-
+    app_ctx.ff_config = FFmpegConfig(ffmpeg_path, ffprobe_path)
+    # ctx.obj = app_ctx
 
 @cli_runner.result_callback()
 @click.pass_context
@@ -126,14 +139,17 @@ def process_result(ctx: click.Context, result, **kwargs):
     app_context = AppContext.get_app_ctx(ctx)
     start_time = app_context.start_time
     divs_lvl1 = app_context.app_config.divs_lvl1
+    # logger.stream(f'Debug. In result_callback(), app_context.dry_run: {app_context.dry_run}\n')
     if start_time:
         run_time = time.perf_counter() - start_time
         app_context.run_time = run_time
         logger.stream(f"Run time: {run_time:.1f} s\n")
-        logger.stream(f"Use '--report-path' flag to export a full set of logs.")
-        logger.stream(f"Type 'audiotown' for help.")
-        section_line = div_section_line("End of Audiotown CLI", 1)
-        logger.stream(f"{section_line}", bold=True)
+    if app_context.report_path is None:
+        logger.stream("Use '--report-path' flag to export a full set of logs.")
+
+    logger.stream(f"Type 'audiotown' for help.")
+    section_line = div_section_line("End of Audiotown CLI", 1)
+    logger.stream(f"{section_line}", bold=True)
 
 
 # ----------------
@@ -145,7 +161,7 @@ def process_result(ctx: click.Context, result, **kwargs):
 @click.option(
     "--codec",
     type=click.Choice(
-        [AudioFormat.ALAC.codec_name, AudioFormat.AAC.codec_name], case_sensitive=False
+        AudioFormat.codec_choices(), case_sensitive=False
     ),
     default=AudioFormat.ALAC.codec_name,
     help="audio encoder (Default is ALAC, Apple Lossless Format)",
@@ -181,7 +197,10 @@ def convert_cmd(
     # 2. codec is 'aac' -> apply bitrate to ffmpeg command.
     """
     # validation resources: ffmpeg
-    app_context = ctx.obj
+    # app_context = AppContext.get_app_ctx(ctx)
+    app_context = AppContext.get_app_ctx(ctx)
+    app_context.report_path = report_path
+    app_context.dry_run = dry_run
     logger = app_context.logger
     if not app_context or not app_context.app_config or not app_context.ff_config:
         abort("Unexpected error. missing dependencices")
@@ -199,17 +218,17 @@ def convert_cmd(
         )
         abort("Error: ffmpeg/ffprobe not detected on system path")
 
-    if dry_run:
+
+    if app_context.dry_run:
         logger.stream(">>> Dry Run (Preview) mode: ON", fg="cyan")
-        app_context.dry_dun = dry_run
+    
     folder = folder.resolve()
-    output_base = folder / f"audiotown_export"
-    if codec:
-        target = AudioFormat.from_codec(codec)
-    else:
-        target = AudioFormat.ALAC
+    output_base = Path(folder / f"audiotown_export")
 
     target = AudioFormat.from_codec(codec) if codec else AudioFormat.ALAC
+    if target is None:
+        raise click.BadParameter(f"Unsupported codec: {codec}")
+    
     # Detect if the user EXPLICITLY provided a bitrate
     user_provided_bitrate = bitrate is not None
 
@@ -237,8 +256,8 @@ def convert_cmd(
         abort("Missing a directory. you MUST enter one.")
 
     # 1. Find files
-
-    files = list(get_audio_files(folder, search_formats))
+    scan_service = app_context.get_scan_service()
+    files = list(scan_service.get_audio_files(folder, search_formats))
     total = len(files)
     if not total:
         logger.stream("No file found.", fg="yellow")
@@ -256,6 +275,7 @@ def convert_cmd(
         return target_path
 
     conv_tasks: List[ConversionTask] = []
+    
     # 1. Identify all unique folders needed
     required_dirs = { _computer_output_path(f).parent for f in files }
 
@@ -269,7 +289,7 @@ def convert_cmd(
             file_path=f,
             target=target,
             output_path=_computer_output_path(f),
-            app_context=app_context,
+            # app_context=app_context,
             bitrate=bitrate, 
         )
         for f in files
@@ -293,8 +313,23 @@ def convert_cmd(
     #         bitrate=bitrate,
     #     )
     #     conv_tasks.append(task)
-
-    conv_task_results = run_parallel_conversion(conv_tasks)
+    convert_service = app_context.get_convert_service()
+    # logger.stream(f'app_context.dry_run: {app_context.dry_run}\n')
+    # logger.stream(f'convert_service dry_run stats: {convert_service.dry_run}\n')
+    with click.progressbar(
+        length=len(conv_tasks),
+        label=click.style("In progress", fg="cyan", bold=True),
+        fill_char=click.style("█", fg="cyan"),
+        show_pos=True,
+        show_percent=True,
+        empty_char=click.style("░", fg="white", dim=True),
+        color=True,
+    ) as bar:
+        conv_task_results = convert_service.run_parallel_conversion(
+            conv_tasks,
+            progress_callback=lambda done, total: bar.update(1),
+        )
+    # conv_task_results = run_parallel_conversion(conv_tasks)
     conv_details = [
         ConversionDetail(
             str(result.file_path),
@@ -308,9 +343,11 @@ def convert_cmd(
     total_count = len(conv_task_results)
     failed_count = total_count - success_count
     conv_report = ConversionReport(
+        folder_path = folder,
         total=total_count,
         success=success_count,
-        failed = failed_count,details=conv_details
+        failed = failed_count,
+        details=conv_details
     )
     logger.stream(f"{div_section_line('Completed',2)}\n")
 
@@ -324,8 +361,8 @@ def convert_cmd(
     logger.stream(" ")
     logger.stream(f" export dir: {str(output_base)}")
 
-    if report_path:
-        base_dir = report_path.resolve()
+    if app_context.report_path is not None:
+        base_dir = app_context.report_path.resolve()
         final_dir = Path(base_dir / app_context.app_config.EXPORT_DIR_NAME)
 
         # create the report dir
@@ -369,10 +406,10 @@ def stats_cmd(
     if not folder or not folder.is_dir():
         abort(f"Error. Cannot open the folder {folder} or it does not exists.")
     # start_perf = time.perf_counter() # More accurate for measuring duration
-    app_context = ctx.obj
-    if not app_context.ff_config:
-        abort(f"Exited unexpected. system depenendecies missing.")
-    tops = 5
+    app_context = AppContext.get_app_ctx(ctx)
+    # if not app_context.ff_config:
+    #     abort(f"Exited unexpected. system depenendecies missing.")
+    tops = app_context.app_config.TOPS or 5
     lvl2_blocks = app_context.app_config.divs_lvl2  # div_blocks(5, "- ")
 
     # Helper for sorting: Sort by count (desc) then name (asc)
@@ -395,22 +432,58 @@ def stats_cmd(
 
     # logger.stream(f"{lvl2_blocks}Scan Library: {folder.name}{lvl2_blocks}", bold=True)
 
-    SUPPORTED = AppConfig().supported_extensions
+    # SUPPORTED = AppConfig().supported_extensions
+    SUPPORTED = app_context.app_config.supported_extensions
     supported_str = ", ".join(SUPPORTED)
     logger.stream(
         f"Scanning audio files ending in one of the ({supported_str}) in {folder.resolve().stem}..."
     )
-    # stats = get_folder_stats(folder, app_context.ff_config.ffprobe_path)
+    probe_service = app_context.get_probe_service()
+    # probe_service = ProbeService(app_context.ff_config.require_ffprobe())
+    scan_service = ScanService(probe_service=probe_service)
+    all_files = list(scan_service.get_audio_files(folder))
+    
+    # logger.stream(f"scan_service: {scan_service}", fg="red")
+    logger.stream(f"{len(all_files):,} Found...", fg="cyan")
 
-    stats = get_folder_stats(folder, app_context.ff_config.ffprobe_path)
+
+    # helper function for click.progressbar
+    last_reported = 0
+    def _on_progress(done: int, total: int) -> None:
+        nonlocal last_reported
+        if done % 5 == 0 or done == total:
+            delta = done - last_reported
+            bar.update(delta)
+            last_reported = done
+            
+    with click.progressbar(
+        length=len(all_files),
+        label=click.style("Processing files", fg="cyan", bold=True),
+        show_percent=True,  # Shows '45%'
+        show_pos=True,  # Shows [120/13000]
+        fill_char=click.style("█", fg="cyan", bold=True),
+        empty_char=click.style("░", fg="white", dim=True),
+    ) as bar:
+        stats = scan_service.get_folder_stats(
+                files=all_files,
+                # ffprobe_path=app_context.ff_config.ffprobe_path,
+                folder_path=folder,
+                # progress_callback=lambda done, total: bar.update(1),
+                progress_callback=_on_progress,
+            )
+
     logger.stream(f"{div_section_line("Stats", 2)}\n")
+    # logger.stream(f'app_context.ff_config: {app_context.ff_config}\n')
+    # logger.stream(f'all_files[1]: {all_files[1]}\n')
+    # logger.stream(f'stats: {stats}')
     total_size_bytes = 0
     total_gb = stats.total_bytes / app_config.GIGA_BYTES
-    hour_format = (
-        f"{stats.total_duration_sec/app_config.SECS_PER_DAY:,.1f} days"
-        if stats.total_duration_sec / app_config.SECS_PER_HOUR > 200
-        else f"{stats.total_duration_sec/ app_config.SECS_PER_HOUR:,.1f} hours"
-    )
+    # hour_format = (
+    #     f"{stats.total_duration_sec/app_config.SECS_PER_DAY:,.1f} days"
+    #     if stats.total_duration_sec / app_config.SECS_PER_HOUR > 200
+    #     else f"{stats.total_duration_sec/ app_config.SECS_PER_HOUR:,.1f} hours"
+    # )
+    hour_format = duration_string(stats.total_duration_sec)
     logger.stream(
         f"Your library can play {hour_format} in one row, contains {stats.total_files:,} files, and takes up {total_gb:.1f} GB.",
     )

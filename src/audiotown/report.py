@@ -12,7 +12,7 @@ from audiotown.consts import (
     ConversionReport,
     MetaContent,
 )
-
+from dataclasses import asdict
 
 def create_report_for_convert(
     report_dir: Path,
@@ -30,10 +30,13 @@ def create_report_for_convert(
             return False, "the directory path does not exist."
 
         # 2. Save JSON
+        # logger.stream(f'In `create_report_for_convert, conv_report: {conv_report}\n')
         json_data = json.dumps(
-            conv_report.to_dict(),
+            # conv_report.to_dict(),
+            asdict(conv_report),
             indent=4,
             ensure_ascii=False,
+            cls=AudiotownEncoder,
         )
         Path(report_dir / "convert.json").write_text(json_data, encoding="utf-8")
 

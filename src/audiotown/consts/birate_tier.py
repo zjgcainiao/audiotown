@@ -1,7 +1,7 @@
 
 from enum import Enum, StrEnum
 
-class BitrateTier(str, Enum):
+class BitrateTier(StrEnum):
     HIGH = "320k"
     MEDIUM = "256k"
     LOW = "128k"

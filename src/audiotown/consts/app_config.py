@@ -6,14 +6,14 @@ from functools import partial
 from audiotown.utils import to_int, div_blocks, extract_year_from_str, sanitize_metadata
 from .ffmpeg_config import FFmpegConfig
 from .birate_tier import BitrateTier
-from. audio_format import AudioFormat
+from .audio_format import AudioFormat
+import audiotown
+
 
 # Frozen makes it immutable/read-only
 @dataclass(frozen=True)
 class AppConfig:
-    import audiotown
-
-    ff_config: Optional[FFmpegConfig] = None
+    # ff_config: Optional[FFmpegConfig] = None
     version: str = field(default=audiotown.__version__)
     supported_bitrates: Set[str] = field(default_factory=BitrateTier.supported_bitrates)
     divs_lvl1: str = field(default=div_blocks(10, "= "))
@@ -21,7 +21,7 @@ class AppConfig:
     supported_extensions: Set[str] = field(
         default_factory=AudioFormat.supported_extensions
     )
-    MAX_WORKERS: int = field(default_factory=lambda: min(32, (os.cpu_count() or 4) * 2))
+    MAX_WORKERS: int = field(default_factory=lambda: min(32, (os.cpu_count() or 4) * 2)-1)
     EXPORT_DIR_NAME = f"audiotown_convert"
     READABLE: str = "readable"
     UNREADABLE: str = "unreadable_or_errors"
