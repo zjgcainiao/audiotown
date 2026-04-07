@@ -8,3 +8,5 @@ from .find_external_cover import find_external_cover
 from .terminal_formatter import div_blocks, format_section, div_section_line
 from .dataclass_to_csv import dataclasses_to_csv
 from .make_json_safe import make_json_safe
+
+from .safe_cast import safe_cast

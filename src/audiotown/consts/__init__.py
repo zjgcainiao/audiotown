@@ -20,3 +20,7 @@ from .conversion import (
     ConversionTask,
     ConversionTaskResult,
 )
+
+from .stream_info import StreamInfo
+from .probe_result import ProbeResult
+from .codec_type import CodecType

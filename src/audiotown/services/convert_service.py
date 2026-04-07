@@ -62,16 +62,6 @@ class ConvertService:
         else:
             output_path = target_path
 
-        # ffmpeg_path = (
-        #     app_context.ff_config.ffmpeg_path if app_context.ff_config else None
-        # )
-        # ffprobe_path = (
-        #     app_context.ff_config.ffprobe_path if app_context.ff_config else None
-        # )
-        # if not ffmpeg_path or not ffprobe_path:
-        #     return False, "error. missing dependencies"
-        # ffmpeg_path, ffprobe_path = self.app_context.ff_config.require_both()
-
         # 1. INSPECT: Does it have embedded artwork
         # probe_service = self.app_context.get_probe_service()
         # probe_service = ProbeService(ffprobe_path=FFmpegConfig().require_ffprobe())

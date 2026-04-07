@@ -1,17 +1,17 @@
-
+import logging
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional, Iterable, Generator, List, Callable
-
 from audiotown.consts.folder_stats import FolderStats
-from audiotown.logger import logger
+from audiotown.logger import logger, SessionLogger
 from audiotown.consts import FolderStats, AppConfig, AudioFormat
 from .probe_service import ProbeService
 from audiotown.consts.ffmpeg_config import FFmpegConfig
 
 class ScanService:
-    def __init__(self, probe_service: ProbeService):
+    def __init__(self, probe_service: ProbeService, logger:SessionLogger = logger):
         self.probe_service = probe_service
+        self.logger = logger
     
     @classmethod
     def from_config(cls, ff_config: FFmpegConfig) -> "ScanService":
@@ -19,7 +19,7 @@ class ScanService:
         return cls(probe_service = ProbeService(ffprobe_path=ffprobe_path))
 
     def get_audio_files(self,
-        directory: Path, formats: Optional[Iterable[AudioFormat]] = None
+        directory: Path, supported_formats: Optional[Iterable[AudioFormat]] = None
     ) -> Generator[Path, None, None]:
         """
         Finds all files in a directory matching the supported AudioFormats.
@@ -34,11 +34,10 @@ class ScanService:
             directory = directory.parent
 
         target_suffixes = (
-            {fmt.ext for fmt in formats}
-            if formats
+            {fmt.ext for fmt in supported_formats}
+            if supported_formats
             else AudioFormat.supported_extensions()
         )
-
 
         # .rglob is recursive (finds files in subfolders)
         for file in directory.rglob("*"):  
@@ -66,7 +65,8 @@ class ScanService:
         else: 
             all_files = list(self.get_audio_files(folder_path))
         total = len(all_files)
-
+        # self.logger.regular_log(f'total: {total}....self.probe_service.ffprobe_path: {self.probe_service.ffprobe_path}...',level=logging.INFO)
+        # logging.log(msg=f'\n...total: {total}....all_files: {all_files}...',level=logging.ERROR)
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             # 2. Submit all tasks
             futures = {
@@ -75,12 +75,15 @@ class ScanService:
             completed = 0
             # 3. Process as they finish
             for future in as_completed(futures):
+                # logging.log(msg=f'\n...total: {total}....stats: {stats}...',level=logging.ERROR) 
                 record = future.result()
                 if record:
+                    # logging.log(msg=f'\n...total: {total}....record: {record}...',level=logging.ERROR) 
                     stats.add(record)
                     # 4. Update the bar immediately
                     # bar.update(1)
                 completed += 1
                 if progress_callback:
                     progress_callback(completed, total)
+        
         return stats

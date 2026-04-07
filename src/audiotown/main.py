@@ -1,9 +1,8 @@
+import time
 import click
 import shutil
 import sys
 import subprocess
-import datetime
-import time
 from pathlib import Path
 from wcwidth import wcswidth
 from typing import Optional, NoReturn, Tuple, Union, List
@@ -23,7 +22,6 @@ from audiotown.consts import (
     FFmpegConfig,
     BitrateTier,
     AppConfig,
-
     TypeSummary,
     DuplicateGroup,
     CmdArgsConfig,
@@ -39,7 +37,10 @@ from audiotown.services.convert_service import ConvertService
 
 app_config = AppConfig()
 app_context = AppContext(
-    start_time=time.perf_counter(), app_config=app_config, logger=SessionLogger()
+    start_time=time.perf_counter(), 
+    app_config=app_config, 
+    ff_config=FFmpegConfig.create(),
+    logger=logger
 )
 
 
@@ -183,6 +184,11 @@ def process_result(ctx: click.Context, result, **kwargs):
     default=None,
     help="A folder where a set of detailed logs will be generated. If no path provided, defaults to the source folder.",
 )
+@click.option(
+    "--video",
+    "video_container",
+
+              )
 def convert_cmd(
     ctx: click.Context,
     folder: Path,
@@ -294,25 +300,7 @@ def convert_cmd(
         )
         for f in files
     ]
-    # Create a set to keep track of 'Work already done'
-    # created_dirs = set()
-    # for file_path in files:
-    #     target_path = _computer_output_path(file_path=file_path)
-    #     parent_dir = target_path.parent
-
-    #     # ONLY talk to the OS if we haven't seen this folder in this loop
-    #     if parent_dir not in created_dirs:
-    #         parent_dir.mkdir(parents=True, exist_ok=True)
-    #         created_dirs.add(parent_dir)
-    #     # target_path.parent.mkdir(parents=True, exist_ok=True)  # Create subfolders!
-    #     task = ConversionTask(
-    #         file_path=file_path,
-    #         target=target,
-    #         output_path=target_path,
-    #         app_context=app_context,
-    #         bitrate=bitrate,
-    #     )
-    #     conv_tasks.append(task)
+   
     convert_service = app_context.get_convert_service()
     # logger.stream(f'app_context.dry_run: {app_context.dry_run}\n')
     # logger.stream(f'convert_service dry_run stats: {convert_service.dry_run}\n')
@@ -519,7 +507,7 @@ def stats_cmd(
     readable_str = f"{safe_division(100 * stats.readable_files, stats.total_files ):>4.0f} % is readable"
     logger.stream(f"{readable_str}")
 
-    unreadable_str = f"{safe_division(stats.total_files-stats.readable_files, stats.total_files * 100):>4.0f} % is unreadable or encounters errors"
+    unreadable_str = f"{safe_division(100* (stats.total_files-stats.readable_files), stats.total_files ):>4.0f} % is unreadable"
     logger.stream(f"{unreadable_str}\n")
 
     # embedded artwork

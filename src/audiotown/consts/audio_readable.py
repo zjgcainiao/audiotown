@@ -1,9 +1,9 @@
 
 from enum import Enum, StrEnum
 
-class AudioReadable(str, Enum):
+class AudioReadable(StrEnum):
     READABLE = "readable"
-    UNREADABLE = "unreadable"
+    UNREADABLE = "unreadable_or_corrupt"
     
     @classmethod
     def get_value(cls, key: str) -> str:

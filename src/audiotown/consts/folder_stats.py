@@ -12,6 +12,7 @@ from .audio_record import AudioRecord
 from .audio_family import AudioFamily
 from .type_summary import TypeSummary
 from .duplicate_group import DuplicateGroup
+from .audio_readable import AudioReadable
 
 @dataclass(slots=True)
 class FolderStats:
@@ -78,30 +79,36 @@ class FolderStats:
 
     def add(self, rec: AudioRecord) -> None:
         """Single source of truth: updates everything consistently."""
-
-        self.records.append(rec)
-        if rec.duration_sec:
-            self.total_duration_sec += float(rec.duration_sec)
-
-        size = rec.size_bytes
+        if rec is None:
+            return None
+        
         self.total_files += 1
-        self.total_bytes += rec.size_bytes
-
-        for table, key in (
-            (self.by_ext, rec.audio_format.ext),
-            (self.by_codec, rec.audio_format.codec_name),
-            (self.by_family, rec.family()),
-            (self.by_tier,  rec.quality_tier().value),
-            (self.by_lossy_band, rec.lossy_bitrate_band().value if rec.lossy_bitrate_band() else "non lossy")
-        ):
-            self._bump(table, key, size)
-
+        size = rec.size_bytes
+        self.records.append(rec)
         if rec.readable:
             self.readable_files += 1
-            self._bump(self.by_readable, "readable", size)
+            self._bump(self.by_readable, AudioReadable.READABLE, size)
 
         else:
-            self._bump(self.by_readable, "unreadable_or_errors", size)
+            self._bump(self.by_readable, AudioReadable.UNREADABLE, size)
+        
+        if size is None or rec.duration_sec is None:
+            return
+        if rec.duration_sec:
+            self.total_duration_sec += float(rec.duration_sec)
+        
+        self.total_bytes += rec.size_bytes if rec.size_bytes is not None else 0
+        if rec.audio_format is not None:
+            for table, key in (
+                (self.by_ext, rec.audio_format.ext),
+                (self.by_codec, rec.audio_format.codec_name),
+                (self.by_family, rec.family().value),
+                (self.by_tier,  rec.quality_tier().value),
+                (self.by_lossy_band, rec.lossy_bitrate_band().value if rec.lossy_bitrate_band() is not None else "non lossy")
+            ):
+                self._bump(table, key, size)
+
+
 
         if rec.is_storage_inefficient():
             self.bloated_files += 1
@@ -134,7 +141,7 @@ class FolderStats:
 
         # duplicate fingerprint
         fp = rec.fingerprint
-        if fp:
+        if fp is not None:
             meta_key = self._normalize_key(rec.fingerprint) if rec.fingerprint else ""
             meta_key = sanitize_metadata(meta_key )
             # e.g., "01. Hotel California.mp3" -> "01 hotel california"
@@ -144,10 +151,10 @@ class FolderStats:
             # refined_fp = self._normalize_key(fp)
             self._bump2(self.fingerprints, primary_key, size, rec)
 
-    def _bump(self, table: defaultdict[str, TypeSummary], key: str, size: int) -> None:
+    def _bump(self, table: defaultdict[str, TypeSummary], key: str, size: Optional[int]) -> None:
         ts = table[key]
         ts.count += 1
-        ts.size_bytes += size
+        ts.size_bytes += size if size is not None else 0
 
     def _bump2(
         self,
@@ -160,7 +167,7 @@ class FolderStats:
         dg.key = key
         dg.count += 1
         # dg.size_bytes += size
-        dg.size_bytes += audio_record.size_bytes
+        dg.size_bytes += audio_record.size_bytes if audio_record.size_bytes is not None else 0
         dg.records.append(audio_record)
         # recs = table[key].records
         # if len(recs) > 1:
@@ -190,6 +197,8 @@ class FolderStats:
         if not audio_records:
             audio_records = self.records
         for rec in audio_records:
+            if rec.readable is False or rec.audio_format is None:
+                continue
             # Key A: The Metadata Fingerprint (Artist - Title)
             meta_key = self._normalize_key(rec.fingerprint) if rec.fingerprint else None
 

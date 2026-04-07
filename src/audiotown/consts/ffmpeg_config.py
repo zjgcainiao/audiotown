@@ -1,8 +1,9 @@
 
 import shutil
+import sys
+from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Optional
-
 
 @dataclass(frozen=True)
 class FFmpegConfig:
@@ -11,16 +12,48 @@ class FFmpegConfig:
     Defaults to system PATH lookup via shutil.which().
     """
 
-    ffmpeg_path: Optional[str] = field(default_factory=lambda: shutil.which("ffmpeg"))
-    ffprobe_path: Optional[str] = field(default_factory=lambda: shutil.which("ffprobe"))
+    ffmpeg_path: Optional[str] = field(default=None)
+    ffprobe_path: Optional[str] = field(default=None)
 
-    def __post_init__(self):
-        # Optional: warn or raise if paths are missing (uncomment if desired)
-        # if self.ffmpeg_path is None:
-        #     raise ValueError("ffmpeg not found in PATH")
-        # if self.ffprobe_path is None:
-        #     raise ValueError("ffprobe not found in PATH")
-        pass
+    # def __post_init__(self):
+    #     # Optional: warn or raise if paths are missing (uncomment if desired)
+    #     # if self.ffmpeg_path is None:
+    #     #     raise ValueError("ffmpeg not found in PATH")
+    #     # if self.ffprobe_path is None:
+    #     #     raise ValueError("ffprobe not found in PATH")
+    #     pass
+    @classmethod
+    def create(cls):
+        """Factory method to find binaries in bundle or system."""
+        
+        def find_binary(name):
+            # 1. Check if we are running in a PyInstaller bundle
+            if hasattr(sys, '_MEIPASS'):
+                # sys._MEIPASS is a string, so we cast it to Path
+                bundle_path = Path(sys._MEIPASS) / "bin" / name
+                if bundle_path.exists():
+                    return str(bundle_path) # Most subprocesses prefer strings
+
+            # 2. Check relative path during development
+            # Current file: root/src/engine/types.py
+            # .parent -> engine | .parent -> src | .parent -> root
+            root_folder = Path(__file__).resolve().parent.parent.parent
+            dev_path = root_folder / "bin" / name
+            
+            if dev_path.exists():
+                return str(dev_path)
+
+            # 3. Fallback to system PATH
+            found = shutil.which(name)
+            # Move logging here so you can see why it failed the first two
+            # if not found:
+            #     logger.error(f"Failed to find {name}. Tried bundle and {dev_path}")
+            return str(found) if found else None
+
+        return cls(
+            ffmpeg_path=find_binary("ffmpeg"),
+            ffprobe_path=find_binary("ffprobe")
+        )
 
     @property
     def is_complete(self) -> bool:

@@ -21,13 +21,16 @@ class AudioFormat(Enum):
 
     # requires 4 arguments
     def __init__(
-        self, ext: str, codec_name: str, encoder: str, is_lossy: bool, description: str
+        self, 
+        ext: str, 
+        codec_name: str, 
+        encoder: str, 
+        is_lossy: bool, 
+        description: str
     ):
         # self.value = ext
         self.ext = ext
-        self.codec_name = (
-            codec_name  # matching `codec_name` from ffprobe -of json output
-        )
+        self.codec_name = codec_name
         self.encoder = encoder  # Use this for the '-c:a' flag in FFmpeg
         self.is_lossy = is_lossy
         self.description = description

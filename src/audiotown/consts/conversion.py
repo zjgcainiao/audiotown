@@ -4,6 +4,7 @@ from typing import Optional, List
 from pathlib import Path
 from .audio_format import AudioFormat
 from audiotown.utils import make_json_safe
+from audiotown.video.consts.video_container import VideoContainer
 # -----------------------------
 # Conversion Report Structure
 # -----------------------------
@@ -48,7 +49,7 @@ class ConversionReport:
 @dataclass(slots=True)
 class ConversionTask:
     file_path: Path
-    target: AudioFormat
+    target: AudioFormat|VideoContainer
     output_path: Path
     # app_context: AppContext
     bitrate: str

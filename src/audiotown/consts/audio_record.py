@@ -1,7 +1,10 @@
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from token import OP
 from typing import Optional
+
+from sympy import false
 from .audio_family import AudioFamily
 from .audio_format import AudioFormat
 from .quality_tier import QualityTier
@@ -9,27 +12,27 @@ from .quality_tier import QualityTier
 @dataclass(slots=True)
 class AudioRecord:
     file_path: Path
-    # common technical fields
-    audio_format: AudioFormat  # includes ext, and codec
+    # technical fields
+    audio_format: Optional[AudioFormat] = None
 
     # common tags (what you aggregate on)
-    year: Optional[str]
-    artist: Optional[str]
-    album: Optional[str]
-    title: Optional[str]
-    genre: Optional[str]
-    track: Optional[str]
+    year: Optional[str] = None
+    artist: Optional[str] = None
+    album: Optional[str] = None
+    title: Optional[str] = None
+    genre: Optional[str] = None
+    track: Optional[str] = None
 
-    bitrate_bps: Optional[int] = 0
-    sample_rate_hz: Optional[int] = 0
-    bits_per_sample: Optional[int] = 0
-    channels: Optional[int] = 0
-    size_bytes: int = 0
-    duration_sec: Optional[float] = 0
+    bitrate_bps: Optional[int] = None
+    sample_rate_hz: Optional[int] = None
+    bits_per_sample: Optional[int] = None
+    channels: Optional[int] = None
+    size_bytes: Optional[int] = None
+    duration_sec: Optional[float] = None
 
     # status
     readable: bool = field(default=True)
-    error: Optional[str] = ""
+    error: Optional[str] = None
     fingerprint: Optional[str] = " _ "  # Calculated at creation
 
     # default
@@ -52,11 +55,15 @@ class AudioRecord:
 
     @property
     def bitrate_kbps(self) -> Optional[float]:
-        return int(self.bitrate_bps) / 1000 if self.bitrate_bps else 0
+        if self.bitrate_bps is None:
+            return None
+        return self.bitrate_bps/1000.0
 
     @property
     def sample_rate_khz(self) -> Optional[float]:
-        return int(self.sample_rate_hz) / 1000 if self.sample_rate_hz else 0
+        if self.sample_rate_hz is None:
+            return None
+        return self.sample_rate_hz / 1000 
 
     def find_external_cover_art(self, folder_path: Path) -> Optional[Path]:
         valid_names = {"cover", "folder", "front", "album"}
@@ -77,10 +84,11 @@ class AudioRecord:
             return None
         return None
 
-    def family(self) -> AudioFamily:
+    def family(self) -> Optional[AudioFamily]:
         if not self.readable:
             return AudioFamily.UNKNOWN
-
+        if self.audio_format is None:
+            return AudioFamily.UNKNOWN
         if not self.audio_format.is_lossy:
             return AudioFamily.LOSSLESS
         if self.audio_format.is_lossy:
@@ -90,13 +98,17 @@ class AudioRecord:
         return AudioFamily.UNKNOWN
 
     def is_pcm(self) -> bool:
-        return self.audio_format.is_pcm
+        if self.audio_format is None:
+            return False
+        return self.audio_format.is_pcm if self.audio_format is not None else False
 
     def is_lossless(self) -> bool:
+        if self.audio_format is None:
+            return False
         return self.audio_format.is_lossless
 
     def is_lossy(self) -> bool:
-        return self.audio_format.is_lossy
+        return self.audio_format.is_lossy if self.audio_format is not None else False
 
     def is_hires_lossless(self) -> bool:
         """ determines if the audio is high resolution lossless
@@ -108,6 +120,8 @@ class AudioRecord:
         Returns:
             bool: True or False
         """
+        if self.audio_format is None:
+            return False
         if self.audio_format.is_lossy:
             return False
         bits = self.bits_per_sample
@@ -128,7 +142,8 @@ class AudioRecord:
         Returns:
             bool: True or False
         """
-
+        if self.audio_format is None:
+            return False
 
         if self.audio_format.is_lossy:
             return False
@@ -141,6 +156,8 @@ class AudioRecord:
         Simple, conservative tiering.
         You can refine per-codec thresholds later (Opus vs MP3 vs AAC).
         """
+        if self.audio_format is None:
+            return None
         if not self.audio_format.is_lossy:
             return None
         # calc bit_rate
@@ -197,6 +214,8 @@ class AudioRecord:
             return False
         bits = self.bits_per_sample or 0
         s_rate = self.sample_rate_hz or 0
+        if bits is None or s_rate is None:
+            return False
         if self.is_pcm() and bits > 24:
             return True
         if self.is_pcm() and s_rate or 0 > 192 * 1000:
