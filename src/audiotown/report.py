@@ -44,18 +44,6 @@ def create_report_for_convert(
         Path(report_dir / "run.log").write_text(
             logger.get_full_log(), encoding="utf-8"
         )
-
-        # 4. Save Meta.txt (The context)
-        # meta_content = [
-        #     "Software Name: Audiotown",
-        #     f"Version: {audiotown.__version__}",
-        #     f"User: {Path.home().name}",
-        #     f"Python: {platform.python_version()}",
-        #     f"OS: {platform.platform()}",
-        # ]
-
-        # Write into meta.txt
-        # meta_text = "\n".join(meta_content)
         meta_text = MetaContent().to_text()
 
         # Pathlib writes (Clean & Fast)
@@ -72,20 +60,19 @@ def create_report_for_convert(
 
 
 def generate_report_for_stats(
-    base_path: Path, stats_folder: Path, stats: FolderStats
+    report_path: Path, stats_folder: Path, stats: FolderStats
 ) -> bool:
     """
     Creates a standardized report bundle (JSON and Log) for Audiotown.
     """
-    if not base_path or not base_path.is_dir():
+    if not report_path or not report_path.is_dir():
         logger.stream(
-            f" Cannot find {base_path} or the report path is invalid.",
+            f" Cannot find {report_path} or the report path is invalid.",
             err=True,
             fg="yellow",
         )
         return False
 
-    report_path = base_path / f"audiotown_stats"
     report_path.mkdir(parents=True, exist_ok=True)
     metadata = [
         "Software Name: Audiotown",
@@ -94,7 +81,7 @@ def generate_report_for_stats(
         f"User: {Path.home().name}",
         f"Python: {platform.python_version()}",
         f"OS: {platform.platform()}",
-        f"stats_folder: {str(stats_folder.absolute())}",
+        f"folder: {str(stats_folder.absolute())}",
         f"report_folder: {str(report_path.resolve())}",
     ]
     # meta_text = "\n".join(metadata)

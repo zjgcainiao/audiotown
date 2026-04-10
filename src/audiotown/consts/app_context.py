@@ -1,7 +1,7 @@
 from __future__ import annotations
 from pathlib import Path
 
-import click 
+import click
 from dataclasses import dataclass, field, asdict, is_dataclass
 from typing import Optional, cast
 from audiotown.logger import SessionLogger
@@ -11,7 +11,8 @@ from .ffmpeg_config import FFmpegConfig
 from audiotown.services.probe_service import ProbeService
 from audiotown.services.scan_service import ScanService
 from audiotown.services import ConvertService, PolicyService, CommandBuilderService
-from audiotown.video.consts import VideoContainer
+from audiotown.consts.video import VideoContainer
+
 
 @dataclass(slots=True)
 class AppContext:
@@ -25,7 +26,7 @@ class AppContext:
     meta_content: MetaContent = field(default_factory=MetaContent)
     report_path: Path | None = None
     targeted_container: VideoContainer | None = None
-
+    cmd_name: str | None = None  # `stats` or `convert`
 
     def get_probe_service(self) -> ProbeService:
         return ProbeService(
@@ -36,7 +37,7 @@ class AppContext:
         return ScanService(
             probe_service=self.get_probe_service(),
         )
-    
+
     def get_convert_service(self) -> ConvertService:
         ffmpeg_path, ffprobe_path = self.ff_config.require_both()
         return ConvertService(
@@ -48,14 +49,17 @@ class AppContext:
             dry_run=self.dry_run,
             verbose=self.verbose,
         )
-    
+
     def get_policy_service(self) -> PolicyService:
         # policy_service = PolicyService()
         return PolicyService()
-    
-    def get_builder_service(self) -> CommandBuilderService:
-        return CommandBuilderService()
 
+    def get_builder_service(self) -> CommandBuilderService:
+        ffmpeg_path, ffprobe_path = self.ff_config.require_both()
+        return CommandBuilderService(
+            ffmpeg_path=ffmpeg_path,
+            logger=self.logger,
+        )
 
     @classmethod
     def get_app_ctx(cls, ctx: click.Context) -> AppContext:
@@ -65,12 +69,12 @@ class AppContext:
     @classmethod
     def ensure_app_ctx(cls, ctx: click.Context) -> AppContext:
         if ctx.obj is None:
-             ctx.obj = cls()
-            # ctx.obj = AppContext(
-            #     start_time=0.0,
-            #     run_time=0.0,
-            #     app_config=AppConfig(),
-            #     ff_config=FFmpegConfig(),
-            #     logger=SessionLogger(),
-            # )
+            ctx.obj = cls()
+        # ctx.obj = AppContext(
+        #     start_time=0.0,
+        #     run_time=0.0,
+        #     app_config=AppConfig(),
+        #     ff_config=FFmpegConfig(),
+        #     logger=SessionLogger(),
+        # )
         return cls.get_app_ctx(ctx)

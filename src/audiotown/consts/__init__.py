@@ -24,3 +24,4 @@ from .conversion import (
 from .stream_info import StreamInfo
 from .probe_result import ProbeResult
 from .codec_type import CodecType
+from .subcommand_name import SubcommandName

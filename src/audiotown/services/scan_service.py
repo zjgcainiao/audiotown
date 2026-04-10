@@ -3,6 +3,7 @@ from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional, Iterable, Generator, List, Callable
 from audiotown.consts.folder_stats import FolderStats
+from audiotown.consts.video.video_container import VideoContainer
 from audiotown.logger import logger, SessionLogger
 from audiotown.consts import FolderStats, AppConfig, AudioFormat
 from .probe_service import ProbeService
@@ -43,7 +44,33 @@ class ScanService:
         for file in directory.rglob("*"):  
             # Check if the file's suffix (lowercased) is in our allowed set
             # if AudioFormat.is_supported(file.suffix):
-            if file.suffix.lower() in target_suffixes:
+            if file.suffix and file.suffix.lower() in target_suffixes:
+                yield file
+
+
+    def get_video_files(self,
+        directory: Path, searchable_containers: Optional[Iterable[VideoContainer]] = None
+    ) -> Generator[Path, None, None]:
+        """
+        Finds all files in a directory matching the supported VideoContainers.
+        If 'formats' is provided, it filters specifically for those.
+        """
+        if not directory.exists():
+           return None
+        if directory.is_file():
+            # Using the logger we built to keep the UI consistent
+            logger.stream(
+                "Provided path is a file; scanning the parent directory instead.",
+                fg="yellow",
+            )
+            directory = directory.parent
+
+        target_suffixes = {container.suffix for container in searchable_containers} if searchable_containers else VideoContainer.supported_suffixes()
+        # .rglob is recursive (finds files in subfolders)
+        for file in directory.rglob("*"):  
+            # Check if the file's suffix (lowercased) is in our allowed set
+            # if AudioFormat.is_supported(file.suffix):
+            if file.suffix and file.suffix.lower() in target_suffixes:
                 yield file
 
 
@@ -70,7 +97,7 @@ class ScanService:
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             # 2. Submit all tasks
             futures = {
-                executor.submit(self.probe_service.probe_file, f, ): f for f in all_files
+                executor.submit(self.probe_service.probe_audio, f, ): f for f in all_files
             }
             completed = 0
             # 3. Process as they finish

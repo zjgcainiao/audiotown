@@ -15,3 +15,4 @@ from .quality_profile import QualityProfile
 from .audio_stream_spec import AudioStreamSpec
 from .compatiblity_level import CompatibilityLevel
 from .lang_map import LANGUAGE_MAP
+from .codec_type import CodecType

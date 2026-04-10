@@ -4,6 +4,7 @@ from pathlib import Path
 from token import OP
 from typing import Optional
 
+from audiotown.utils import safe_cast
 from sympy import false
 from .audio_family import AudioFamily
 from .audio_format import AudioFormat
@@ -57,7 +58,7 @@ class AudioRecord:
     def bitrate_kbps(self) -> Optional[float]:
         if self.bitrate_bps is None:
             return None
-        return self.bitrate_bps/1000.0
+        return safe_cast(self.bitrate_bps, float)/1000.0
 
     @property
     def sample_rate_khz(self) -> Optional[float]:

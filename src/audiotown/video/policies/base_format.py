@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from audiotown.video.consts import MediaInfo, PolicyDecision
+from audiotown.consts.video import MediaInfo, PolicyDecision
 from typing import Dict, List
 
 class BaseFormatPolicy(ABC):

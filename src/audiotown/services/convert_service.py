@@ -1,15 +1,25 @@
 from __future__ import annotations
+from email.mime import audio
 import subprocess
 import json
 import os
-from typing import Tuple, List, Callable
+from typing import Concatenate, Optional, Tuple, List, Callable
 from pathlib import Path
+
 # from audiotown.consts.ffmpeg_config import FFmpegConfig
 # from audiotown.consts.app_context import AppContext
 from audiotown.consts.audio_format import AudioFormat
 from audiotown.consts.birate_tier import BitrateTier
 from audiotown.consts.conversion import ConversionTask, ConversionTaskResult
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from audiotown.services.command_builder_service import CommandBuilderService
+from audiotown.video.policies.target_policy import AppleSafeMp4TargetPolicy
+from audiotown.consts.video import media_info
+from audiotown.consts.video.policy_decision import PolicyDecision
+from audiotown.consts.video.video_container import VideoContainer
+from audiotown.services.policy_service import PolicyService
+from torch import cat
+
 from .probe_service import ProbeService
 from audiotown.utils import find_external_cover
 from audiotown.logger import SessionLogger
@@ -27,7 +37,6 @@ class ConvertService:
         supported_bitrates: set[str],
         dry_run: bool = False,
         verbose: bool = False,
-        
     ) -> None:
         self.ffmpeg_path = ffmpeg_path
         self.ffprobe_path = ffprobe_path
@@ -49,16 +58,23 @@ class ConvertService:
         file_path: Path,
         target: AudioFormat,
         target_path: Path,
-        # app_context: AppContext,
-        bit_rate: str = "",
+        bit_rate: Optional[str] = None,
     ) -> Tuple[bool, str]:
         """
         Converts a single FLAC to ALAC (m4a) with cover art integration. Support both lossless (alac) and lossy (aac)
         Returns True if successful, False otherwise.
+        input args: 
+            - file_path
+            - target
+            - target_path
+            - bit_rate
+
+        Returns:
+            (success, message)
         """
         # Apple-friendly format .m4a
-        if not target_path:
-            output_path = target_folder.with_suffix(target.ext)
+        if target_path is None:
+            output_path = file_path.with_suffix(target.ext)
         else:
             output_path = target_path
 
@@ -67,16 +83,27 @@ class ConvertService:
         # probe_service = ProbeService(ffprobe_path=FFmpegConfig().require_ffprobe())
         # audio_record = probe_file(file_path, ffprobe_path)
 
-        audio_record = self.probe_service.probe_file(file_path)
-        if not audio_record:
-            return False, ""
-        
+        try:
+            audio_record = self.probe_service.probe_audio(file_path)
+        except Exception as exc:
+            return False, f"Failed to inspect file: {exc}"
+
+        if audio_record is None:
+            return False, "Unsupported or invalid file."
+        if not audio_record.readable:
+            err_msg = (audio_record.error or "").strip()
+            if err_msg:
+                return False, f"Error. File unreadable: {err_msg}"
+            return False, "Error. File unreadable."
+
         has_embedded_artwork = audio_record.has_embedded_artwork
         # 2. CHECK: Is there a local cover.jpg?
         has_external_artwork = False
-        external_artwork_path = None
+        external_artwork_path: Path | None = None
         if not has_embedded_artwork:
-            external_artwork_path = audio_record.find_external_cover_art(file_path.parent)
+            external_artwork_path = audio_record.find_external_cover_art(
+                file_path.parent
+            )
             has_external_artwork = external_artwork_path is not None
         cmd = [
             self.ffmpeg_path,
@@ -115,6 +142,12 @@ class ConvertService:
                 else BitrateTier.MEDIUM.value
             )
             cmd.extend(["-b:a", selected_bitrate])
+        # temp_output = str(output_path) + ".tmp"
+        temp_output = output_path.with_name(
+            output_path.stem + ".tmp" + output_path.suffix
+        )
+        temp_output_path = Path(temp_output)
+
         cmd.extend(
             [
                 "-c:v",
@@ -124,18 +157,21 @@ class ConvertService:
                 "-map_metadata",
                 "0",
                 "-y",
-                str(output_path),
+                str(temp_output),
             ]
         )
         # self.logger.log(f'this is the convert_flac inside the `ConvertService`....self.dry_run: {self.dry_run}')
         if self.dry_run:
-            
+
             probe_cmd = [
                 self.ffprobe_path,
                 "-v",
                 "error",
                 "-show_entries",
-                "stream=sample_rate,bits_per_raw_sample,bits_per_raw_sample,bit_rate, channels:format=duration:format_tags=title,artist,album,date,genre,tracks",
+                # "stream=sample_rate,bits_per_raw_sample,bits_per_raw_sample,bit_rate, channels:format=duration:format_tags=title,artist,album,date,genre,tracks",
+                "stream=sample_rate,bits_per_raw_sample,bit_rate,channels:"
+                "format=duration:"
+                "format_tags=title,artist,album,date,genre,track",
                 "-of",
                 "json",
                 "-i",
@@ -175,14 +211,77 @@ class ConvertService:
             return True, ""
 
         # temp output before the conversion completes
-        temp_output = str(output_path) + ".tmp"
 
         # 2. Add the '-threads 1' flag to your 'cmd' list
         # This prevents 8 FFmpegs from fighting over the same CPU cores
-        cmd.insert(1, "-threads")
-        cmd.insert(2, "1")
+        # cmd.insert(1, "-threads")
+        # cmd.insert(2, "1")
         try:
+            process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,  # Capture stderr (2>)
+                text=True,
+                errors="replace",
+            )
+            # stdout, stderr_data = process.communicate()
+            # We wait for the process to finish
+            process.wait()
+            stderr_data = None
+            if process.returncode != 0:
+                stderr_data = process.stderr.read() if process.stderr else ""
+                if temp_output_path.exists():
+                    temp_output_path.unlink()  # <--- YOU DELETED THE FILE HERE
+                return (
+                    False,
+                    f"FFmpeg Error (Code {process.returncode}): {stderr_data.strip()}",
+                )
 
+            # SUCCESS: Log the stderr because that contains the bitrate/codec info
+            stderr_data = process.stderr.read() if process.stderr else ""
+            temp_output_path.rename(output_path)
+
+            return True, f"FFmpeg Output: {stderr_data.strip()}"
+        except subprocess.CalledProcessError as e:
+            # logger.stream(f"CRITICAL: {str(e)}", fg="red")
+            return False, f"CRITICAL: {str(e)}"
+        except FileNotFoundError as e:
+            return (
+                False,
+                f"CRITICAL: ffmpeg binary not found. Check your AppConfig/PATH. {str(e)}",
+            )
+        except Exception as e:
+            return False, f"CRITICAL: System error: {str(e)}."
+
+    def convert_video_to_apple_safe(
+        self,
+        file_path: Path,
+        target: VideoContainer,
+        output_path: Path,
+    ) -> Tuple[bool, str]:
+        media_info = self.probe_service.probe_video_file(file_path)
+        if media_info is None:
+            return False, "file can't be converted"
+        decision = PolicyDecision()
+        policy = PolicyService().get_policy_based_on_media_info(media_info)
+        if policy is not None:
+            policy.apply(media=media_info, decision=decision)
+        if target == VideoContainer.MP4:
+            target_policy = AppleSafeMp4TargetPolicy()
+            target_policy.apply(decision=decision)
+        builder_service = CommandBuilderService(self.ffmpeg_path, self.logger)
+        temp_output = output_path.with_name(
+            output_path.stem + ".tmp" + output_path.suffix
+        )
+        temp_output_path = Path(temp_output)
+        args = builder_service.build(
+            media_info=media_info, output_path=temp_output_path, decision=decision
+        )
+        cmd = args
+        # cmd.insert(1, "-threads")
+        # cmd.insert(2, "1")
+        # temp output before the conversion completes
+        try:
             process = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
@@ -196,53 +295,71 @@ class ConvertService:
             stderr_data = ""
             if process.returncode != 0:
                 stderr_data = process.stderr.read() if process.stderr else ""
-                if os.path.exists(temp_output):
-                    os.remove(temp_output)
-                return (
-                    False,
-                    f"FFmpeg Error (Code {process.returncode}): {stderr_data.strip()}",
-                )
+                if temp_output_path.exists():
+                    temp_output_path.unlink()
+                    return (
+                        False,
+                        f"FFmpeg Error (Code {process.returncode}): {stderr_data.strip()}",
+                    )
 
             # SUCCESS: Log the stderr because that contains the bitrate/codec info
-            if stderr_data:
-                os.rename(temp_output, output_path)
-                return True, f"FFmpeg Output: {stderr_data.strip()}"
+            stderr_data = process.stderr.read() if process.stderr else ""
+            # if stderr_data:
+            temp_output_path.rename(output_path)
+            return True, f"FFmpeg Output: {stderr_data.strip()}"
         except subprocess.CalledProcessError as e:
             # logger.stream(f"CRITICAL: {str(e)}", fg="red")
             return False, f"CRITICAL: {str(e)}"
-        except FileNotFoundError:
+        except FileNotFoundError as e:
             return (
                 False,
-                "CRITICAL: ffmpeg binary not found. Check your AppConfig/PATH.",
+                f"CRITICAL: {str(e)}",
             )
         except Exception as e:
             return False, f"CRITICAL: System error: {str(e)}"
 
-        return True, ""
-
-    def convert_task_wrapper(self,task_data: ConversionTask) -> ConversionTaskResult:
+    def convert_task_wrapper(self, task_data: ConversionTask) -> ConversionTaskResult:
         """
-        Unpacks the dict and returns (file_path, success, message)
+        Unpacks the ConversionTask and returns ConvesionTaskResult.
+
         """
         file_path = task_data.file_path
-        success, msg = self.convert_flac_to_apple_friendly(
-            file_path,
-            task_data.target,
-            task_data.output_path,
-            # task_data.app_context,
-            # app_context,
-            task_data.bitrate,
-        )
+        target = task_data.target
+        output_path = task_data.output_path
+        success = False
+        msg = ""
+        if isinstance(target, AudioFormat):
+            bit_rate = task_data.bitrate
+            success, msg = self.convert_flac_to_apple_friendly(
+                file_path,
+                target,
+                output_path,
+                bit_rate,
+            )
+        elif isinstance(target, VideoContainer):
+            success, msg = self.convert_video_to_apple_safe(
+                file_path=file_path,
+                target=target,
+                output_path=output_path,
+            )
+
         return ConversionTaskResult(
             file_path=file_path,
             output_path=task_data.output_path,
             success=success,
             message=msg,
         )
-
+    
+    # helper function to delete output that is bad
+    def cleanup_bad_output(self, dst: Path) -> None:
+        if dst.exists():
+            try:
+                dst.unlink()
+            except OSError:
+                pass
 
     def run_parallel_conversion(
-            self,
+        self,
         all_tasks: List[ConversionTask],
         progress_callback: Callable[[int, int], None] | None = None,
     ) -> List[ConversionTaskResult]:
@@ -260,7 +377,8 @@ class ConvertService:
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             # Submit all tasks at once
             future_to_path = {
-                executor.submit(self.convert_task_wrapper, t): t.file_path for t in all_tasks
+                executor.submit(self.convert_task_wrapper, t): t.file_path
+                for t in all_tasks
             }
 
             for future in as_completed(future_to_path):

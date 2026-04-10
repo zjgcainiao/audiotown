@@ -1,28 +1,29 @@
 from pathlib import Path
 from typing import Optional, List
+from audiotown.consts import ffmpeg_config
 from audiotown.consts.audio_format import AudioFormat
-from audiotown.video.consts import (
+from audiotown.consts.video import (
     PolicyDecision,
     SpeedProfile,
     SubtitleMode,
     SubtitleStreamSpec,
     VideoCodec,
     AudioStreamSpec,
+    MediaAction,
 )
 from dataclasses import dataclass
 
-from audiotown.video.consts.pixel_format_policy import PixelFormatPolicy
-from audiotown.video.consts.quality_profile import QualityProfile
-from audiotown.video.consts.video_encoder import VideoEncoder
-from audiotown.video.consts.video_container import VideoContainer
-from audiotown.video.consts.media_info import MediaInfo
-from audiotown.video.consts.lang_map import LANGUAGE_MAP
+from audiotown.consts.video.pixel_format_policy import PixelFormatPolicy
+from audiotown.consts.video.quality_profile import QualityProfile
+from audiotown.consts.video.video_encoder import VideoEncoder
+from audiotown.consts.video.video_container import VideoContainer
+from audiotown.consts.video.media_info import MediaInfo
+from audiotown.consts.video.lang_map import LANGUAGE_MAP
 from audiotown.logger import logger, SessionLogger
 from typing import Sequence, TypeVar
 
 # generic type placeholer
 T = TypeVar("T")
-
 
 @dataclass(slots=True)
 class CommandBuilderOption:
@@ -30,23 +31,22 @@ class CommandBuilderOption:
     output_folder: Optional[Path] = None
     note: Optional[str] = None
 
-
 class CommandBuilderService:
     def __init__(
-        self, 
-        # options: CommandBuilderOption, 
-
-        service_logger: SessionLogger = logger
+        self,
+        ffmpeg_path: str,
+        logger: SessionLogger = logger,
+        # options: CommandBuilderOption,
     ):
-        # def __init__(self):
+        self.ffmpeg_path = ffmpeg_path
+        self.logger = logger
         # self.options = options  # Global settings like bitrate, output folder
-        self.logger = service_logger
 
     def build(
         self, media_info: MediaInfo, output_path: Path, decision: PolicyDecision
     ) -> list[str]:
 
-        argv = ["ffmpeg", "-hide_banner", "-y"]
+        argv = [self.ffmpeg_path, "-hide_banner", "-loglevel", "error", "-y"]
 
         if decision.needs_genpts:
             argv.extend(["-fflags", "+genpts"])
@@ -55,68 +55,109 @@ class CommandBuilderService:
 
         argv.extend(["-map", "0:v:0"])
         argv.extend(["-map", "0:a?"])
-        argv.extend(["-map", "0:s?"])
+        # argv.extend(["-map", "0:s?"])
+        # 3. Processing Logic
+        if decision.action == MediaAction.REMUX:
+            # LIGHTNING FAST: Just move the data packets
+            argv.extend(["-c:v", "copy"])
+            argv.extend(["-c:a", "copy"])
+            # argv.extend(["-c:s", "copy"])
+        else:
+            # TRANSCODE: The heavy lifting logic
+            if decision.video_encoder:
+                argv.extend(["-c:v", decision.video_encoder.value])
+            if decision.video_encoder == VideoEncoder.LIBX264:
+                argv.extend(self._build_libx264_quality_args(decision))
 
-        if decision.video_encoder:
-            argv.extend(["-c:v", decision.video_encoder])
+            # Fixes that only apply during Transcode
+            if (
+                decision.is_variable_frame_rate
+                and decision.target_frame_rate is not None
+            ):
+                # argv.extend(shlex.split(f"-fps_mode cfr -r {decision.target_frame_rate}"))
+                argv.extend(["-fps_mode", "cfr", "-r", f"{decision.target_frame_rate}"])
 
-        argv.extend(["-tag:v", "hvc1"])
+            if decision.ignore_unknown:
+                argv.append("-ignore_unknown")
 
-        audio_format = decision.audio_format
-        if audio_format:
-            argv.extend(["-c:a", audio_format.encoder])
-            if audio_format.codec_name == AudioFormat.AAC.codec_name:
-                argv.extend(["-c:a", "192k"])
+            argv.extend(["-tag:v", "avc1"])
 
-        if decision.video_encoder == VideoEncoder.LIBX264:
-            argv.extend(self._build_libx264_quality_args(decision))
+            audio_format = decision.audio_format
+            if audio_format:
+                argv.extend(["-c:a", audio_format.encoder])
+                if audio_format.codec_name == AudioFormat.AAC.codec_name:
+                    argv.extend(["-b:a", "192k"])
 
-        if decision.subtitle_mode == SubtitleMode.MOV_TEXT_OR_DROP:
-            argv.extend(["-c:s", SubtitleMode.MOV_TEXT_OR_DROP])
+            # Subtitle Mapping: Only map what we can actually handle
+            sub_streams = (
+                media_info.subtitle_streams if media_info.has_subtitles else []
+            )
+            eligible_subs = [s for s in sub_streams if s.is_mp4_text_compatible]
+
+            if (
+                len(eligible_subs) > 0
+                and decision.subtitle_mode == SubtitleMode.MOV_TEXT_OR_DROP
+            ):
+                # Instead of -map 0:s?, we map specifically the ones that fit our policy
+                for stream in eligible_subs:
+                    argv.extend(["-map", f"0:{stream.stream_index}"])
+
+                # Now this global flag is SAFE because we only mapped compatible streams
+                argv.extend(["-c:s", "mov_text"])
+            else:
+                # If no text-compatible subs, we don't map any (the 'DROP' part of your policy)
+                pass
 
         argv.extend(
             self._apply_language_and_default_preferences(
                 media=media_info, decision=decision
             )
         )
-
         if decision.faststart:
             argv.extend(["-movflags", "+faststart"])
         # override
-        argv.append("-y")
         argv.append(str(output_path))
         return argv
 
     def _build_libx264_quality_args(self, decision: PolicyDecision) -> list[str]:
         args = []
 
-        if decision.speed_profile == SpeedProfile.MEDIUM:
-            args.extend(["-preset", SpeedProfile.MEDIUM])
-        elif decision.speed_profile is not None:
-            args.extend(["-preset", decision.speed_profile.value])
-        crf_value = 22
-        if decision.quality_profile == QualityProfile.BALANCED:
-            crf_value = 22
-        elif decision.quality_profile == QualityProfile.HIGH:
-            crf_value = 20
-        elif decision.quality_profile == QualityProfile.LOW:
-            crf_value = 24
-        args.extend(["-crf", crf_value])
+        # 1. Handle Preset
+        preset = decision.speed_profile.value if decision.speed_profile else "medium"
+        args.extend(["-preset", preset])
+
+        # 2. Handle CRF (Quality)
+        # Using a map is cleaner than a chain of if/elifs
+        crf_map = {
+            QualityProfile.HIGH: 18,
+            QualityProfile.BALANCED: 22,
+            QualityProfile.LOW: 26,
+        }
+        crf_value = (
+            crf_map.get(decision.quality_profile, 22)
+            if decision.quality_profile is not None
+            else 22
+        )
+        args.extend(["-crf", str(crf_value)])
+
+        # 3. Handle Pixel Format
         if decision.pixel_format_policy == PixelFormatPolicy.YUV420P_SAFE:
-            args.extend(["-pix_fmt", PixelFormatPolicy.YUV420P_SAFE])
+            args.extend(["-pix_fmt", f"{PixelFormatPolicy.YUV420P_SAFE}"])
+
+        # Safe to have. These ensure the H.264 stream doesn't use features too complex for Apple hardware
+        args.extend(["-profile:v", "high", "-level", "4.1"])
+
         return args
 
     def _generate_output_path(
-        self, media: MediaInfo, output_folder: Path, target_container: VideoContainer = VideoContainer.MP4
+        self,
+        media: MediaInfo,
+        output_folder: Path,
+        target_container: VideoContainer = VideoContainer.MP4,
     ) -> str | None:
         # Logic to swap .rmvb/.avi for .mp4 in the target folder
 
-
-        return str(
-            output_folder
-            / media.file.with_suffix(target_container.suffix).name
-        )
-
+        return str(output_folder / media.file.with_suffix(target_container.suffix).name)
 
     def _normalize_lang(self, lang: str | None) -> str | None:
         if not lang:
@@ -134,20 +175,23 @@ class CommandBuilderService:
         1. English stream already marked default
         2. First English stream
         """
-        english_indexes: list[int] = []
-
-        for i, stream in enumerate(streams):
-            lang = self._normalize_lang(getattr(stream, "language", None))
-            if lang == "eng":
-                english_indexes.append(i)
+        # 1. Identify all candidates (Good for future development)
+        english_indexes = [
+            i
+            for i, s in enumerate(streams)
+            if self._normalize_lang(getattr(s, "language", None)) == "eng"
+        ]
 
         if not english_indexes:
             return None
 
+        # 2. Apply business logic to the candidates
+        # Check if any candidate is the 'default'
         for i in english_indexes:
             if getattr(streams[i], "is_default", False):
                 return i
 
+        # 3. Fallback to the first candidate
         return english_indexes[0]
 
     def _build_default_disposition_args(
@@ -222,8 +266,6 @@ class CommandBuilderService:
         # args: list[str],
         media: MediaInfo,
         decision: PolicyDecision,
-        # output_audio_streams: list[AudioStreamSpec],
-        # output_subtitle_streams: list[SubtitleStreamSpec],
     ) -> list[str]:
         args: list[str] = []
         # Audio default preference

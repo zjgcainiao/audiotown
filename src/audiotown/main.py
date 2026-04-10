@@ -1,9 +1,11 @@
 import time
+from audiotown.consts.video.video_container import VideoContainer
 import click
 import shutil
 import sys
 import subprocess
 from pathlib import Path
+from sympy import false
 from wcwidth import wcswidth
 from typing import Optional, NoReturn, Tuple, Union, List
 from audiotown.utils import (
@@ -29,6 +31,7 @@ from audiotown.consts import (
     ConversionReport,
     ConversionTask,
     ConversionTaskResult,
+    SubcommandName,
 )
 from audiotown.logger import logger, SessionLogger
 from audiotown.report import create_report_for_convert, generate_report_for_stats
@@ -37,10 +40,10 @@ from audiotown.services.convert_service import ConvertService
 
 app_config = AppConfig()
 app_context = AppContext(
-    start_time=time.perf_counter(), 
-    app_config=app_config, 
+    start_time=time.perf_counter(),
+    app_config=app_config,
     ff_config=FFmpegConfig.create(),
-    logger=logger
+    logger=logger,
 )
 
 
@@ -53,7 +56,7 @@ def abort(message: str, code: int = 1) -> NoReturn:
 
 def ensure_ffmpeg() -> Tuple[str, str]:
     """Checks for ffmpeg  & ffprobe and offers to install them via 'Homebrew' if missing.
-    handles CLI startup/install flow. """
+    handles CLI startup/install flow."""
     ffmpeg_path: Optional[str]
     ffprobe_path: Optional[str]
 
@@ -126,12 +129,13 @@ def cli_runner(ctx: click.Context):
     app_ctx.start_time = time.perf_counter()
 
     divs_lvl1 = app_ctx.app_config.divs_lvl1
-    
+
     logger.stream(f"{divs_lvl1} Audiotown CLI Starting {divs_lvl1}", bold=True)
     ffmpeg_path, ffprobe_path = ensure_ffmpeg()
 
     app_ctx.ff_config = FFmpegConfig(ffmpeg_path, ffprobe_path)
     # ctx.obj = app_ctx
+
 
 @cli_runner.result_callback()
 @click.pass_context
@@ -156,14 +160,12 @@ def process_result(ctx: click.Context, result, **kwargs):
 # ----------------
 # SUBCOMMAND 1: convert
 # ----------------
-@cli_runner.command(name="convert")
+@cli_runner.command(name=SubcommandName.CONVERT)
 @click.pass_context
 @click.argument("folder", type=click.Path(exists=True, path_type=Path))
 @click.option(
     "--codec",
-    type=click.Choice(
-        AudioFormat.codec_choices(), case_sensitive=False
-    ),
+    type=click.Choice(AudioFormat.codec_choices(), case_sensitive=False),
     default=AudioFormat.ALAC.codec_name,
     help="audio encoder (Default is ALAC, Apple Lossless Format)",
 )
@@ -180,15 +182,18 @@ def process_result(ctx: click.Context, result, **kwargs):
     "--report-path",
     "report_path",
     type=click.Path(file_okay=False, dir_okay=True, writable=True, path_type=Path),
-    flag_value=".",
     default=None,
     help="A folder where a set of detailed logs will be generated. If no path provided, defaults to the source folder.",
 )
 @click.option(
-    "--video",
-    "video_container",
-
-              )
+    "--to-video",
+    "to_video",
+    type=click.Choice([VideoContainer.MP4.name.lower()], case_sensitive=True),
+    is_flag=False,
+    flag_value=VideoContainer.MP4.name.lower(),
+    default=None,
+    help="A folder where a set of detailed logs will be generated. If no path provided, defaults to the source folder.",
+)
 def convert_cmd(
     ctx: click.Context,
     folder: Path,
@@ -196,6 +201,7 @@ def convert_cmd(
     report_path: Optional[Path],
     dry_run: bool,
     bitrate: str,
+    to_video: Optional[str],
 ) -> None:
     """Convert FLACs in FOLDER to Apple-friendly formats.
     # Logic:
@@ -207,6 +213,7 @@ def convert_cmd(
     app_context = AppContext.get_app_ctx(ctx)
     app_context.report_path = report_path
     app_context.dry_run = dry_run
+    app_context.cmd_name = SubcommandName.CONVERT
     logger = app_context.logger
     if not app_context or not app_context.app_config or not app_context.ff_config:
         abort("Unexpected error. missing dependencices")
@@ -224,46 +231,61 @@ def convert_cmd(
         )
         abort("Error: ffmpeg/ffprobe not detected on system path")
 
-
     if app_context.dry_run:
         logger.stream(">>> Dry Run (Preview) mode: ON", fg="cyan")
-    
-    folder = folder.resolve()
-    output_base = Path(folder / f"audiotown_export")
 
-    target = AudioFormat.from_codec(codec) if codec else AudioFormat.ALAC
-    if target is None:
-        raise click.BadParameter(f"Unsupported codec: {codec}")
-    
-    # Detect if the user EXPLICITLY provided a bitrate
-    user_provided_bitrate = bitrate is not None
-
-    # 2. Assign the actual working bitrate (Fallback to MEDIUM if None)
-    effective_bitrate = bitrate if user_provided_bitrate else BitrateTier.MEDIUM.value
-    s_bitrate = ""
-    if not target:
-        abort("Command exited unexpected. unknown format(s).")
-
-    if not target.is_lossless:
-        # We don't need to check 'if bitrate in supported' because
-        # click.Choice already validated this for us!
-        s_bitrate = f"(bitrate_kbps: {effective_bitrate})"
-
-    logger.stream(
-        f"  {f"source format":<16} : {" ".join(search_codecs):<{len(search_codecs)}} "
-    )
-    logger.stream(f"  {f"output format":<16} : {codec:<{len(codec)+1}} {s_bitrate}")
-    # ONLY show warning if it's lossless AND the user specifically typed --bitrate
-    if target.is_lossless and user_provided_bitrate:
-        logger.stream("Ignore bitrate for loss less conversion.", fg="yellow")
-    default_folder = str(Path(".").resolve())
     if not folder:
         # logger.stream(message="Missing a directory. you MUST enter one.",fg="red", err=True)
         abort("Missing a directory. you MUST enter one.")
+    folder = folder.resolve()
+    output_base = Path(folder / f"audiotown_export")
+    if to_video is None:
+        target = AudioFormat.from_codec(codec) if codec else AudioFormat.ALAC
+            # Detect if the user EXPLICITLY provided a bitrate
+        is_user_provided_bitrate = bitrate is not None
+
+        # 2. Assign the actual working bitrate (Fallback to MEDIUM if None)
+        effective_bitrate = (
+            bitrate if is_user_provided_bitrate else BitrateTier.MEDIUM.value
+        )
+        s_bitrate = ""
+        if target is None:
+            abort("Command exited unexpected. unknown format(s).")
+
+        if isinstance(target, AudioFormat) and not target.is_lossless:
+            # We don't need to check 'if bitrate in supported' because
+            # click.Choice already validated this for us!
+            s_bitrate = f"(bitrate_kbps: {effective_bitrate})"
+
+        logger.stream(
+            f"  {f"source format":<16} : {" ".join(search_codecs):<{len(search_codecs)}} "
+        )
+        logger.stream(f"  {f"output format":<16} : {codec:<{len(codec)+1}} {s_bitrate}")
+        if (
+            isinstance(target, AudioFormat)
+            and target.is_lossless
+            and is_user_provided_bitrate
+        ):
+            logger.stream("Ignore bitrate for loss less conversion.", fg="yellow")
+    else:
+        container = to_video.upper().strip()
+        if container in VideoContainer.__members__:
+            target = VideoContainer[container]  # suffix
+        else:
+            target = VideoContainer.MP4
+    if target is None:
+        raise click.BadParameter(f"Unsupported video format: {to_video}")
+
+
+    # ONLY show warning if it's lossless AND the user specifically typed --bitrate
 
     # 1. Find files
+    files = []
     scan_service = app_context.get_scan_service()
-    files = list(scan_service.get_audio_files(folder, search_formats))
+    if to_video is not None:
+        files = list(scan_service.get_video_files(folder, [VideoContainer.AVI,VideoContainer.RMVB]))
+    else:
+        files = list(scan_service.get_audio_files(folder, search_formats))
     total = len(files)
     if not total:
         logger.stream("No file found.", fg="yellow")
@@ -277,13 +299,14 @@ def convert_cmd(
     def _computer_output_path(file_path: Path) -> Path:
         file_path = file_path.resolve()
         relative_path = file_path.relative_to(folder)
-        target_path = Path(output_base / relative_path).with_suffix(target.ext)
+        target_suffix = getattr(target, "ext", None) or getattr(target, "suffix", None)
+        target_path = Path(output_base / relative_path).with_suffix(target_suffix)
         return target_path
 
     conv_tasks: List[ConversionTask] = []
-    
+
     # 1. Identify all unique folders needed
-    required_dirs = { _computer_output_path(f).parent for f in files }
+    required_dirs = {_computer_output_path(f).parent for f in files}
 
     # 2. Create them once
     for d in required_dirs:
@@ -295,18 +318,17 @@ def convert_cmd(
             file_path=f,
             target=target,
             output_path=_computer_output_path(f),
-            # app_context=app_context,
-            bitrate=bitrate, 
+            bitrate=bitrate,
         )
         for f in files
     ]
-   
+    # logger.stream(f'conv_tasks[:2]: {conv_tasks[:2]}...')
     convert_service = app_context.get_convert_service()
     # logger.stream(f'app_context.dry_run: {app_context.dry_run}\n')
     # logger.stream(f'convert_service dry_run stats: {convert_service.dry_run}\n')
     with click.progressbar(
         length=len(conv_tasks),
-        label=click.style("In progress", fg="cyan", bold=True),
+        label=click.style("Processing_file", fg="cyan", bold=True),
         fill_char=click.style("█", fg="cyan"),
         show_pos=True,
         show_percent=True,
@@ -327,15 +349,16 @@ def convert_cmd(
         )
         for result in conv_task_results
     ]
+    logger.stream(f"Debug: conv_task_results [:2]: {conv_task_results [:2]}...")
     success_count = sum(1 for r in conv_task_results if r.success)
     total_count = len(conv_task_results)
     failed_count = total_count - success_count
     conv_report = ConversionReport(
-        folder_path = folder,
+        folder_path=folder,
         total=total_count,
         success=success_count,
-        failed = failed_count,
-        details=conv_details
+        failed=failed_count,
+        details=conv_details,
     )
     logger.stream(f"{div_section_line('Completed',2)}\n")
 
@@ -351,7 +374,7 @@ def convert_cmd(
 
     if app_context.report_path is not None:
         base_dir = app_context.report_path.resolve()
-        final_dir = Path(base_dir / app_context.app_config.EXPORT_DIR_NAME)
+        final_dir = Path(base_dir / app_context.app_config.REPORT_DIR_NAME / "convert")
 
         # create the report dir
         final_dir.mkdir(parents=True, exist_ok=True)
@@ -367,12 +390,10 @@ def convert_cmd(
 # ----------------
 # SUBCOMMAND 2: stats
 # ----------------
-@cli_runner.command(name="stats")
+@cli_runner.command(name=SubcommandName.STATS)
 @click.pass_context
 @click.option(
     "--report-path",
-    is_flag=False,
-    flag_value=".",
     type=click.Path(path_type=Path),
     help="Generate logs/JSON. Defaults to current directory if no path given.",
 )
@@ -395,6 +416,8 @@ def stats_cmd(
         abort(f"Error. Cannot open the folder {folder} or it does not exists.")
     # start_perf = time.perf_counter() # More accurate for measuring duration
     app_context = AppContext.get_app_ctx(ctx)
+    app_context.report_path = report_path
+    app_context.cmd_name = SubcommandName.STATS
     # if not app_context.ff_config:
     #     abort(f"Exited unexpected. system depenendecies missing.")
     tops = app_context.app_config.TOPS or 5
@@ -430,20 +453,20 @@ def stats_cmd(
     # probe_service = ProbeService(app_context.ff_config.require_ffprobe())
     scan_service = ScanService(probe_service=probe_service)
     all_files = list(scan_service.get_audio_files(folder))
-    
+
     # logger.stream(f"scan_service: {scan_service}", fg="red")
     logger.stream(f"{len(all_files):,} Found...", fg="cyan")
 
-
     # helper function for click.progressbar
     last_reported = 0
+
     def _on_progress(done: int, total: int) -> None:
         nonlocal last_reported
         if done % 5 == 0 or done == total:
             delta = done - last_reported
             bar.update(delta)
             last_reported = done
-            
+
     with click.progressbar(
         length=len(all_files),
         label=click.style("Processing files", fg="cyan", bold=True),
@@ -453,12 +476,12 @@ def stats_cmd(
         empty_char=click.style("░", fg="white", dim=True),
     ) as bar:
         stats = scan_service.get_folder_stats(
-                files=all_files,
-                # ffprobe_path=app_context.ff_config.ffprobe_path,
-                folder_path=folder,
-                # progress_callback=lambda done, total: bar.update(1),
-                progress_callback=_on_progress,
-            )
+            files=all_files,
+            # ffprobe_path=app_context.ff_config.ffprobe_path,
+            folder_path=folder,
+            # progress_callback=lambda done, total: bar.update(1),
+            progress_callback=_on_progress,
+        )
 
     logger.stream(f"{div_section_line("Stats", 2)}\n")
     # logger.stream(f'app_context.ff_config: {app_context.ff_config}\n')
@@ -700,7 +723,6 @@ def stats_cmd(
         total_waste_bytes = 0
 
         if sorted_fps:
-
             for _, data in sorted_fps:
                 total_waste_bytes += data.waste_size
             sorted_fps = sorted_fps[: min(app_config.TOPS, len(sorted_fps))]
@@ -714,7 +736,9 @@ def stats_cmd(
                     sorted_recs = sorted(
                         data.records,
                         key=lambda x: (
-                            not x.audio_format.is_lossless,
+                            not (
+                                x.audio_format.is_lossless if x.audio_format else False
+                            ),
                             -(to_int(x.bitrate_bps)),
                             dp_key,
                         ),
@@ -755,11 +779,14 @@ def stats_cmd(
                 dim=True,
             )
 
-    if report_path:
+    if app_context.report_path is not None:
         # If the user just typed '--report-path', this will be Path(".")
         # We ensure the directory exists
-        report_path.mkdir(parents=True, exist_ok=True)
-        generate_report_for_stats(report_path, folder, stats)
+        report_path = app_context.report_path.resolve()
+        final_dir = Path(report_path / app_context.app_config.REPORT_DIR_NAME / "stats")
+
+        final_dir.mkdir(parents=True, exist_ok=True)
+        generate_report_for_stats(final_dir, folder, stats)
     logger.stream(f"{lvl2_blocks} End of Stats {lvl2_blocks} ")
 
 

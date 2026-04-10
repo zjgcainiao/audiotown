@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from typing import Optional
 from .lang_map import LANGUAGE_MAP
-
+from .audio_codec import AudioCodec
 @dataclass(slots=True)
 class AudioStreamSpec:
     codec_name: str | None
@@ -22,3 +22,9 @@ class AudioStreamSpec:
 
         v = self.language.strip().lower()
         return LANGUAGE_MAP.get(v, v)
+    
+    @property
+    def is_apple_ready(self) -> bool:
+        if self.codec_name in [AudioCodec.AAC.value]:
+         return True
+        return False

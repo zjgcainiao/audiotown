@@ -1,6 +1,6 @@
-from audiotown.video.consts import MediaInfo, PolicyDecision, SubtitleMode, VideoCodec, CompatibilityLevel, SpeedProfile, QualityProfile, PixelFormatPolicy, VideoContainer
+from audiotown.consts.video import MediaInfo, PolicyDecision, SubtitleMode, VideoCodec, CompatibilityLevel, SpeedProfile, QualityProfile, PixelFormatPolicy, VideoContainer
 from audiotown.consts import AudioFormat
-from audiotown.video.consts.video_encoder import VideoEncoder
+from audiotown.consts.video.video_encoder import VideoEncoder
 
 class AppleSafeMp4TargetPolicy:
     def apply(self, decision: PolicyDecision) -> None:

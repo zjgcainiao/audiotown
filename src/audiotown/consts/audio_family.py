@@ -1,5 +1,5 @@
 
-from enum import Enum, StrEnum
+from enum import  StrEnum
 class AudioFamily(StrEnum):
     LOSSLESS = "lossless"
     LOSSY = "lossy"

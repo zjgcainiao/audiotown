@@ -1,5 +1,5 @@
 from .base_format import BaseFormatPolicy
-from audiotown.video.consts import MediaAction
+from audiotown.consts.video import MediaAction
 
 
 class DefaultPolicy(BaseFormatPolicy):

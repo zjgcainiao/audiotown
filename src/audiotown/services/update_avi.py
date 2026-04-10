@@ -118,7 +118,6 @@ def probe_file(path: Path) -> ProbeInfo | None:
     )
 
 
-
 def format_fps(fps: str | None) -> str:
     if not fps:
         return "?"

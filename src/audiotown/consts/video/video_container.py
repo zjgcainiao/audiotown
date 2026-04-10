@@ -40,3 +40,7 @@ class VideoContainer(Enum):
             if member.suffix in suffix:
                 return member
         return None
+    
+    @classmethod
+    def supported_suffixes(cls) -> set[str]:
+        return {member.suffix for member in cls}

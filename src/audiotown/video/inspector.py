@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from audiotown.services.probe_service import ProbeService
 from .policies import DefaultPolicy, MKVPolicy,RMVBPolicy,AVIPolicy
-from audiotown.video.consts import MediaReport, ProbeSummary
+from audiotown.consts.video import MediaReport, ProbeSummary
 from audiotown.consts import FFmpegConfig
 
 @dataclass(slots=True)

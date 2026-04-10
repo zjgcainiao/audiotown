@@ -1,30 +1,46 @@
 from .base_format import BaseFormatPolicy
-from audiotown.video.consts import MediaAction
-from audiotown.video.consts import MediaInfo, PolicyDecision
+from audiotown.consts.video import MediaAction
+from audiotown.consts.video import MediaInfo, PolicyDecision, VideoEncoder
+from audiotown.consts import AudioFormat
 
 class MKVPolicy(BaseFormatPolicy):
-    # def evaluate(self, probe_data: dict) -> MediaAction:
-    #     v_codec = probe_data['streams'][0].get('codec_name', '')
-    #     a_codec = probe_data['streams'][1].get('codec_name', '')
-        
-    #     # The "Customs Officer" Check
-    #     if v_codec in ['h264', 'hevc'] and a_codec in ['aac', 'alac', 'mp3']:
-    #         return MediaAction.REMUX  # Fast path
-    #     return MediaAction.TRANSCODE  # Heavy path
-
     def apply(self, media: MediaInfo, decision: PolicyDecision) -> None:
-        decision.source_container = "mkv"
-
         video = media.first_video_stream
-        audio = media.first_audio_stream
+        if not video:
+            # We don't process files without video streams in this pipeline
+            return
 
-        if video and video.codec_name not in {"h264", "hevc"}:
-            decision.video_must_transcode = True
+        # 1. Evaluate Video Health
+        # This checks for: Codec (H.264), PixFmt (yuv420p), packing (AVCC), and CFR.
+        video_ready = video.is_apple_ready
+        
+        if not video_ready:
+            decision.repair_notes.append(f"MKV Video transcode required: {video.codec_name}")
+            # If the video is VFR (common in MKVs from handbrake/web-rips), 
+            # we flag it for repair during the transcode process.
+            if video.is_vfr:
+                decision.is_variable_frame_rate = True
+                decision.target_frame_rate = video.r_frame_rate
+                decision.repair_notes.append("Fixed Variable Frame Rate issues.")
 
-        if audio and audio.codec_name not in {"aac", "alac", "mp3"}:
-            decision.audio_must_transcode = True
+        # 2. Evaluate Audio Health (The 'all()' Perfectionist)
+        audio_streams = media.audio_streams or []
+        all_audio_ready = all(a.is_apple_ready for a in audio_streams)
+        
+        if not all_audio_ready:
+            # Most MKVs use AC3, DTS, or FLAC. Apple prefers AAC in MP4.
+            decision.repair_notes.append("MKV Audio normalization required (non-AAC detected).")
 
-        if media.subtitle_streams:
-            decision.subtitle_mode = "mov_text_or_drop"
+        # 3. Final Decision: The "Apple-Safe" Verdict
+        # We only REMUX if every single A/V stream is already in its final form.
+        if video_ready and all_audio_ready:
+            decision.action = MediaAction.REMUX
+            decision.repair_notes.append("High-quality remux: No re-encoding performed.")
+        else:
+            decision.action = MediaAction.TRANSCODE
+            # Ensure we use our standard v1.1 targets
+            decision.video_encoder = VideoEncoder.LIBX264
+            decision.audio_format = AudioFormat.AAC
 
-        decision.repair_notes.append("MKV source inspected for Apple-safe MP4 output.")
+        # 4. Mandatory Global Standard (Always true for MKV -> MP4 conversion)
+        decision.faststart = True

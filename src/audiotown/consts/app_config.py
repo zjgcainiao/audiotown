@@ -22,7 +22,7 @@ class AppConfig:
         default_factory=AudioFormat.supported_extensions
     )
     MAX_WORKERS: int = field(default_factory=lambda: min(32, (os.cpu_count() or 4) * 2)-1)
-    EXPORT_DIR_NAME = f"audiotown_convert"
+    REPORT_DIR_NAME = f"audiotown_report"
     READABLE: str = "readable"
     UNREADABLE: str = "unreadable_or_errors"
     BLOATED: str = "bloated"

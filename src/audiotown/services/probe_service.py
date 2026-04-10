@@ -10,10 +10,10 @@ from audiotown.consts.probe_result import  ProbeResult
 from audiotown.consts.stream_info import  StreamInfo
 from audiotown.consts.ffmpeg_config import FFmpegConfig
 from audiotown.consts.codec_type import CodecType
-from audiotown.video.consts import MediaInfo
-from audiotown.video.consts.video_container import VideoContainer
-from audiotown.video.consts import AudioStreamSpec, VideoStreamSpec, SubtitleStreamSpec
-from idna import check_nfc
+from audiotown.consts.video.media_info import MediaInfo
+from audiotown.consts.video.video_container import VideoContainer
+from audiotown.consts.video import AudioStreamSpec, VideoStreamSpec, SubtitleStreamSpec
+
 
 
 class ProbeService:
@@ -83,7 +83,7 @@ class ProbeService:
         steam_info = StreamInfo.from_ffprobe_json(file=file_path,raw_json=raw_json)
         return ProbeResult(file_path=file_path, success=True, stream_info=steam_info)
 
-    def probe_file(
+    def probe_audio(
         self,
         file_path: Path,
     ) -> Optional[AudioRecord]:
@@ -311,6 +311,7 @@ class ProbeService:
                     profile=stream.get("profile"),
                     level=stream.get("level"),
                     is_default=bool(stream.get("disposition", {}).get("default", 0)),
+                    is_avc=stream.get("is_avc",None),
                     ))
             elif codec_type == CodecType.AUDIO:
                 audio_specs.append(AudioStreamSpec(

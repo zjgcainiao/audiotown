@@ -14,6 +14,7 @@ from audiotown.consts import AudioFormat
 
 @dataclass(slots=True)
 class PolicyDecision:
+    action: MediaAction| None = None
     container: VideoContainer | None = None
     video_codec: VideoCodec | None = None
     video_encoder: VideoEncoder | None = None
@@ -29,27 +30,19 @@ class PolicyDecision:
     quality_profile: QualityProfile | None = None         
     # "medium"
     speed_profile: SpeedProfile | None = None        
-
     needs_genpts: bool = False
-    # force_yuv420p: bool = False
-
     preserve_metadata: bool = True
     preserve_chapters: bool = True
     faststart: bool = False
     prefer_english_audio_default: bool = False
     prefer_english_subtitle_default: bool = False
     normalize_missing_language_tags: bool = False
+    is_variable_frame_rate: bool = False
+    target_frame_rate: str | None = None
+    ignore_unknown: bool = False
 
     warnings: list[str] = field(default_factory=list)
     repair_notes: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
 
 
-@dataclass(slots=True)
-class PolicyDecision2:
-    action: MediaAction
-    description: str
-    is_apple_ready: bool = False
-    action_mode: MediaActionMode = MediaActionMode.COMPATIBILITY_FIRST
-    target_codec: str = "libx264"
-    
