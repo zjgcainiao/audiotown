@@ -144,7 +144,7 @@ class ConvertService:
             cmd.extend(["-b:a", selected_bitrate])
         # temp_output = str(output_path) + ".tmp"
         temp_output = output_path.with_name(
-            output_path.stem + ".tmp" + output_path.suffix
+             f"{output_path.stem}.{os.getpid()}.tmp{output_path.suffix}"
         )
         temp_output_path = Path(temp_output)
 
@@ -219,38 +219,44 @@ class ConvertService:
         try:
             process = subprocess.Popen(
                 cmd,
-                stdout=subprocess.PIPE,
+                # stdout=subprocess.PIPE,
+                stdout=subprocess.DEVNULL,
                 stderr=subprocess.PIPE,  # Capture stderr (2>)
                 text=True,
                 errors="replace",
             )
             # stdout, stderr_data = process.communicate()
             # We wait for the process to finish
-            process.wait()
-            stderr_data = None
+            # process.wait()
+            # stderr_data = None
+            
+            stdout_data, stderr_data = process.communicate()
+            stderr_data = stderr_data or ""
             if process.returncode != 0:
-                stderr_data = process.stderr.read() if process.stderr else ""
-                if temp_output_path.exists():
-                    temp_output_path.unlink()  # <--- YOU DELETED THE FILE HERE
+                # stderr_data = process.stderr.read() if process.stderr else ""
+                self._cleanup_bad_output(dst=temp_output_path)
                 return (
                     False,
                     f"FFmpeg Error (Code {process.returncode}): {stderr_data.strip()}",
                 )
+            if not temp_output_path.exists():
+                return False, "FFmpeg reported success, but temp output file was not created."
 
-            # SUCCESS: Log the stderr because that contains the bitrate/codec info
-            stderr_data = process.stderr.read() if process.stderr else ""
+            #  SUCCESS: Log the stderr because that contains the bitrate/codec info
+            # stderr_data = process.stderr.read() if process.stderr else ""
             temp_output_path.rename(output_path)
 
             return True, f"FFmpeg Output: {stderr_data.strip()}"
-        except subprocess.CalledProcessError as e:
-            # logger.stream(f"CRITICAL: {str(e)}", fg="red")
-            return False, f"CRITICAL: {str(e)}"
+        # except subprocess.CalledProcessError as e:
+        #     # logger.stream(f"CRITICAL: {str(e)}", fg="red")
+        #     return False, f"CRITICAL: {str(e)}"
         except FileNotFoundError as e:
             return (
                 False,
                 f"CRITICAL: ffmpeg binary not found. Check your AppConfig/PATH. {str(e)}",
             )
         except Exception as e:
+            self._cleanup_bad_output(dst=temp_output_path)
             return False, f"CRITICAL: System error: {str(e)}."
 
     def convert_video_to_apple_safe(
@@ -271,7 +277,7 @@ class ConvertService:
             target_policy.apply(decision=decision)
         builder_service = CommandBuilderService(self.ffmpeg_path, self.logger)
         temp_output = output_path.with_name(
-            output_path.stem + ".tmp" + output_path.suffix
+             f"{output_path.stem}.{os.getpid()}.tmp{output_path.suffix}"
         )
         temp_output_path = Path(temp_output)
         args = builder_service.build(
@@ -283,6 +289,7 @@ class ConvertService:
         # temp output before the conversion completes
         try:
             process = subprocess.Popen(
+            # process = subprocess.run(
                 cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,  # Capture stderr (2>)
@@ -291,19 +298,20 @@ class ConvertService:
             )
             # stdout, stderr_data = process.communicate()
             # We wait for the process to finish
-            process.wait()
-            stderr_data = ""
+            # process.wait()
+            # stderr_data = ""
+            _, stderr_data = process.communicate()
+            stderr_data = stderr_data or ""
             if process.returncode != 0:
-                stderr_data = process.stderr.read() if process.stderr else ""
-                if temp_output_path.exists():
-                    temp_output_path.unlink()
-                    return (
-                        False,
-                        f"FFmpeg Error (Code {process.returncode}): {stderr_data.strip()}",
-                    )
+                # stderr_data = process.stderr.read() if process.stderr else ""
+                self._cleanup_bad_output(dst=temp_output_path)
+                return (
+                    False,
+                    f"FFmpeg Error (Code {process.returncode}): {stderr_data.strip()}",
+                )
 
             # SUCCESS: Log the stderr because that contains the bitrate/codec info
-            stderr_data = process.stderr.read() if process.stderr else ""
+            # stderr_data = process.stderr.read() if process.stderr else ""
             # if stderr_data:
             temp_output_path.rename(output_path)
             return True, f"FFmpeg Output: {stderr_data.strip()}"
@@ -316,6 +324,7 @@ class ConvertService:
                 f"CRITICAL: {str(e)}",
             )
         except Exception as e:
+            self._cleanup_bad_output(dst=temp_output_path)
             return False, f"CRITICAL: System error: {str(e)}"
 
     def convert_task_wrapper(self, task_data: ConversionTask) -> ConversionTaskResult:
@@ -351,12 +360,14 @@ class ConvertService:
         )
     
     # helper function to delete output that is bad
-    def cleanup_bad_output(self, dst: Path) -> None:
-        if dst.exists():
-            try:
-                dst.unlink()
-            except OSError:
-                pass
+    def _cleanup_bad_output(self, dst: Path | None) -> None:
+        if dst is None:
+            return
+        try:
+            # if dst.exists():
+            dst.unlink(missing_ok=True)
+        except OSError:
+            pass
 
     def run_parallel_conversion(
         self,

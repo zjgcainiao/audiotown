@@ -2,10 +2,9 @@ import logging
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional, Iterable, Generator, List, Callable
-from audiotown.consts.folder_stats import FolderStats
 from audiotown.consts.video.video_container import VideoContainer
 from audiotown.logger import logger, SessionLogger
-from audiotown.consts import FolderStats, AppConfig, AudioFormat
+from audiotown.consts import AudioFolderStats, AppConfig, AudioFormat
 from .probe_service import ProbeService
 from audiotown.consts.ffmpeg_config import FFmpegConfig
 
@@ -82,10 +81,10 @@ class ScanService:
         max_workers: int = AppConfig().MAX_WORKERS,
         # progress_callback=None,
         progress_callback: Callable[[int, int], None] | None = None,
-    ) -> FolderStats:
+    ) -> AudioFolderStats:
         """Gathers technical and metadata stats for a folder."""
 
-        stats = FolderStats(folder_path=folder_path)
+        stats = AudioFolderStats(folder_path=folder_path)
 
         if files is not None:
             all_files = files

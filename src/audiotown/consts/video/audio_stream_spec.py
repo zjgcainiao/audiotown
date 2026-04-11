@@ -11,16 +11,16 @@ class AudioStreamSpec:
     bits_per_sample: int | None
     # newly added 2024-04-01
     is_default: bool = field(default=False)
-    language: Optional[str] = field(default=None)
+    lang: Optional[str] = field(default=None)
     stream_index: Optional[int] = field(default=None)
 
 
     @property
     def normalized_language(self) -> str | None:
-        if not self.language:
+        if not self.lang:
             return None
 
-        v = self.language.strip().lower()
+        v = self.lang.strip().lower()
         return LANGUAGE_MAP.get(v, v)
     
     @property

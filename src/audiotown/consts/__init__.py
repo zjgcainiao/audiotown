@@ -7,7 +7,7 @@ from .quality_tier import QualityTier
 from .audio_format import AudioFormat
 from .audio_record import AudioRecord
 from .duplicate_group import DuplicateGroup
-from .folder_stats import FolderStats
+from .auido_folder_stats import AudioFolderStats
 from .meta_content import MetaContent
 from .audiotown_encoder import AudiotownEncoder
 from .app_config import AppConfig
@@ -25,3 +25,4 @@ from .stream_info import StreamInfo
 from .probe_result import ProbeResult
 from .codec_type import CodecType
 from .subcommand_name import SubcommandName
+from .stream_codec_type import StreamCodecType

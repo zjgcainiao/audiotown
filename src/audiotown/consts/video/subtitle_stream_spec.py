@@ -6,7 +6,7 @@ from .lang_map import LANGUAGE_MAP
 class SubtitleStreamSpec:
     stream_index: Optional[int] = field(default=None)
     codec_name: str | None = None
-    language: str | None = None
+    lang: str | None = None
     is_default: bool = False
     is_forced: bool = False
     title: str | None = None
@@ -19,8 +19,8 @@ class SubtitleStreamSpec:
 
     @property
     def normalized_language(self) -> str | None:
-        if not self.language:
+        if not self.lang:
             return None
 
-        v = self.language.strip().lower()
+        v = self.lang.strip().lower()
         return LANGUAGE_MAP.get(v, v)

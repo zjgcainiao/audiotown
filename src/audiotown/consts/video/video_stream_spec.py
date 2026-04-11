@@ -1,9 +1,11 @@
 from dataclasses import dataclass, field
 from .video_codec import VideoCodec
 from .pixel_format_policy import PixelFormatPolicy
+from audiotown.utils import safe_cast
 @dataclass(slots=True)
 class VideoStreamSpec:
     codec_name: str | None
+    codec_tag_string: str | None
     width: int | None
     height: int | None
     pix_fmt: str | None
@@ -13,10 +15,31 @@ class VideoStreamSpec:
     avg_frame_rate: str | None
     r_frame_rate: str | None
     duration_sec: float | None
+    lang: str|None
+
     stream_index: int | None = field(default=None)
     is_default: bool = field(default=False)
     is_avc: bool | None = field(default=None)  # Raw ffprobe flag
 
+    @property
+    def resolution(self) -> str | None:
+        """
+            Returns a string of width x height as resolution. Can be None
+        """
+        if self.width is None or self.height is None:
+            return None
+        if self.width <= 0 or self.height <= 0:
+            return None
+        return f"{self.width}x{self.height}"
+    
+    @property
+    def resolution_tuple(self) -> tuple[int, int] | None:
+        if self.width is None or self.height is None:
+            return None
+        if self.width <= 0 or self.height <= 0:
+            return None
+        return self.width, self.height
+    
     @property
     def bit_rate_kbps(self) -> float | None:
         if self.bit_rate is None:
@@ -65,17 +88,23 @@ class VideoStreamSpec:
     def is_apple_ready(self) -> bool:
         """
         An unvarnished assessment of compatibility.
-        Apple devices require: AVCC packing (is_avc=True), YUV420P, and Constant Frame Rate.
+        Apple devices require: 
+          1. AVCC packing (is_avc=True), 
+          2. YUV420P, and, 
+          3. Constant Frame Rate (is_vrf=False).
         """
         # 1. Must be H.264 (or HEVC, but you're targeting h264 for v1.1)
         if self.codec_name not in [VideoCodec.H264.ffprobe_name, ]: # "avc1"
             return False
-            
+        
+        if self.level is not None and self.level > 41:
+            return False
+        
         # 2. Must NOT be Annex-B (is_avc: false)
         if self.is_annex_b:
             return False
             
-        # 3. Must be YUV420P
+        # 3. Must be YUV420P. 8bit
         if self.pix_fmt != PixelFormatPolicy.YUV420P_SAFE:
             return False
             

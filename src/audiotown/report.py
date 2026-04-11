@@ -7,7 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from audiotown.logger import SessionLogger, logger
 from audiotown.consts import (
-    FolderStats,
+    AudioFolderStats,
     AudiotownEncoder,
     ConversionReport,
     MetaContent,
@@ -60,7 +60,7 @@ def create_report_for_convert(
 
 
 def generate_report_for_stats(
-    report_path: Path, stats_folder: Path, stats: FolderStats
+    report_path: Path, stats_folder: Path, stats: AudioFolderStats
 ) -> bool:
     """
     Creates a standardized report bundle (JSON and Log) for Audiotown.

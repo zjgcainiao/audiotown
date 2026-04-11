@@ -13,6 +13,8 @@ class VideoCodec(Enum):
     RV40 = ("rv40", True, "RealVideo 9/10")
     H263 = ("h263", True, "H.263")
     MJPEG = ("mjpeg", True, "Motion JPEG")
+    
+    # lossless (is_lossy=False)
     PRORES = ("prores", False, "Apple ProRes")
     FFV1 = ("ffv1", False, "FFV1 Lossless")
     UTVIDEO = ("utvideo", False, "Ut Video Lossless")

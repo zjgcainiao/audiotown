@@ -15,7 +15,7 @@ from .duplicate_group import DuplicateGroup
 from .audio_readable import AudioReadable
 
 @dataclass(slots=True)
-class FolderStats:
+class AudioFolderStats:
     folder_path: Optional[Path]
     # records
     records: List[AudioRecord] = field(default_factory=list)

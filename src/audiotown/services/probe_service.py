@@ -295,13 +295,14 @@ class ProbeService:
         subtitle_specs: list[SubtitleStreamSpec] = []
 
         for stream in stream_info.streams:
-            codec_type = stream.get("codec_type")
+            codec_type = stream.get("codec_type", None)
 
             if codec_type == CodecType.VIDEO:
                 video_specs.append(VideoStreamSpec(
-                    stream_index=safe_cast(stream.get("index"), int),
+                    stream_index=safe_cast(stream.get("index", None), int),
                     width=safe_cast(stream.get("width"), int),
                     height=safe_cast(stream.get("height"), int),
+                    codec_tag_string=safe_cast(stream.get("codec_tag_string"), str),
                     pix_fmt=stream.get("pix_fmt"),
                     bit_rate=safe_cast(stream.get("bit_rate"), int) or None,
                     r_frame_rate=stream.get("r_frame_rate"),
@@ -310,6 +311,7 @@ class ProbeService:
                     codec_name=stream.get("codec_name"),
                     profile=stream.get("profile"),
                     level=stream.get("level"),
+                    lang=stream.get("tags",{}).get("language",None),
                     is_default=bool(stream.get("disposition", {}).get("default", 0)),
                     is_avc=stream.get("is_avc",None),
                     ))
@@ -321,7 +323,7 @@ class ProbeService:
                     codec_name= stream.get("codec_name") or None,
                     bit_rate= safe_cast(stream.get("bit_rate"), int),
                     channels= safe_cast(stream.get("channels"), int),
-                    language=stream.get("tags",{}).get("language",None),
+                    lang=stream.get("tags",{}).get("language",None),
                     is_default=bool(stream.get("disposition", {}).get("default", 0)),
 
                 ))
@@ -329,7 +331,7 @@ class ProbeService:
                 subtitle_specs.append(SubtitleStreamSpec(
                     stream_index=safe_cast(stream.get("index"), int),
                     codec_name = stream.get("codec_name") or None,
-                    language=stream.get("tags",{}).get("language",None),
+                    lang=stream.get("tags",{}).get("language",None),
                     is_default=bool(stream.get("disposition", {}).get("default", 0)),
                     is_forced=bool(stream.get("disposition", {}).get("forced", 0)),
                     title = stream.get("disposition", {}).get("title", None),
@@ -341,6 +343,7 @@ class ProbeService:
         video_container = VideoContainer.from_format_name(str(format_name))
 
 
+        nb_streams = int(format_data["nb_streams"]) if format_data.get("nb_streams") else None
         duration_sec = float(format_data["duration"]) if format_data.get("duration") else None
         size_bytes = int(format_data["size"]) if format_data.get("size") else None
         bit_rate = int(format_data["bit_rate"]) if format_data.get("bit_rate") else None
@@ -351,6 +354,7 @@ class ProbeService:
                 is_readable=False,
                 container_name=video_container,
                 format_name=format_name,
+                nb_streams=nb_streams,
                 error="No video stream found.",
                 video_streams=video_specs,
                 audio_streams=audio_specs,
@@ -358,11 +362,11 @@ class ProbeService:
 
             )
 
-
         return MediaInfo(
             file=video_file,
             container_name=video_container,
             format_name=format_name,
+            nb_streams=nb_streams,
             video_streams=video_specs,
             audio_streams=audio_specs,
             subtitle_streams=subtitle_specs,
