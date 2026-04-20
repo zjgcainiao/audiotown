@@ -1,5 +1,3 @@
-from networkx import descendants
-
 from .base_format import BaseFormatPolicy
 from audiotown.consts.video import MediaAction
 from audiotown.consts.video import VideoRecord, PolicyDecision

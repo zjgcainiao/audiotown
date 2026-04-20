@@ -8,10 +8,11 @@
 
 ## whats new
 
-1. added video upgrade feature via `--to-video` flag. it trancodes (converts) legacy `AVI` and `RMVB` files into Apple safe MP4. 
+1. added video upgrade feature via `--to-video` flag. it trancodes (converts) legacy `AVI` and `RMVB` files into Apple safe `MP4`. 
    1. Output format: H264/AAC 192K
    2. Maximium compability with Apple Hardwares, including iPhone 4 or later.
-   3. `audiotown convert '/my/path/to/video_folder/' --to-video=mp4`
+   3. Use `mov_text` when subtitles are detected.
+   4. `audiotown convert '/my/path/to/video_folder/' --to-video=mp4`
 2. improved terminal output.
 3. Bug fixing.
 
@@ -44,10 +45,10 @@ It brings the same core idea into a dedicated desktop experience: scan your libr
 5. `convert` now supports a new video transcode flag `--to-video=mp4`. It tranforms the old AVI files into Apple ready MP4. Output files will be saved under a new subfolder named `audiotown_exported`.
 
 
-## Demo
-- ![convert demo](https://raw.githubusercontent.com/zjgcainiao/audiotown/main/docs/demo_convert.png)
+## Demos
+- ![flac to m4a](https://raw.githubusercontent.com/zjgcainiao/audiotown/main/docs/demo_convert.png)
 - ![stats demo](https://raw.githubusercontent.com/zjgcainiao/audiotown/main/docs/demo_stat.png)
-- ![stats demo](docs/avi-rmvb-convert.png)
+- ![avi upgrade to apple safe mp4 demo](docs/avi-rmvb-convert.png)
 
 # Installation
 1. Ensure I have [FFmpeg](https://ffmpeg.org/download.html) installed on the system. It is the powerhouse that does the conversion and other heavy work like probing `ffprobe`. Will need it installed and working. MacOS users can install it via [homebrew](https://formulae.brew.sh/formula/ffmpeg): `brew install ffmpeg`.
