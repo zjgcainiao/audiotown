@@ -1,6 +1,4 @@
 from dataclasses import dataclass, field
-
-from sympy import false
 from .video_codec import VideoCodec
 from .pixel_format_policy import PixelFormatPolicy, PixelFormat
 from audiotown.utils import safe_cast
