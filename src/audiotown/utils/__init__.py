@@ -10,3 +10,5 @@ from .dataclass_to_csv import dataclasses_to_csv
 from .make_json_safe import make_json_safe
 
 from .safe_cast import safe_cast
+
+from .safe_json_load import safe_json_load

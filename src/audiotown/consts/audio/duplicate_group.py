@@ -1,6 +1,6 @@
 
 from dataclasses import dataclass, field
-from .audio_record import AudioRecord
+from audiotown.consts.audio.audio_record import AudioRecord
 from audiotown.utils import to_int
 
 @dataclass(slots=True)

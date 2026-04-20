@@ -1,10 +1,11 @@
 from pathlib import Path
 from typing import Optional
 
-from audiotown.consts.video.media_info import MediaInfo, VideoContainer
+from audiotown.consts.video.video_record import VideoRecord, VideoContainer
 from audiotown.video.policies.avi import AVIPolicy
 from audiotown.video.policies.mkv import MKVPolicy
 from audiotown.video.policies.rmvb import RMVBPolicy
+from audiotown.video.policies.mp4 import MP4Policy
 from audiotown.video.policies.default import DefaultPolicy
 from audiotown.video.policies.base_format import BaseFormatPolicy
 from audiotown.logger import logger, SessionLogger
@@ -17,6 +18,7 @@ class PolicyService:
         VideoContainer.AVI: AVIPolicy,
         VideoContainer.MKV: MKVPolicy,
         VideoContainer.RMVB: RMVBPolicy,
+        # VideoContainer.MP4: MP4Policy,
     }
 
     def __init__(self, service_logger: SessionLogger = logger):
@@ -26,7 +28,9 @@ class PolicyService:
         VideoContainer.AVI: AVIPolicy,
         VideoContainer.MKV: MKVPolicy,
         VideoContainer.RMVB: RMVBPolicy,
-        # Add MP4 if you have a specific policy for it later
+        # VideoContainer.MP4: MP4Policy,
+        
+        
         }
         
 
@@ -45,7 +49,7 @@ class PolicyService:
         policy_class = self._POLICY_MAP.get(container, DefaultPolicy)
         return policy_class()
 
-    def get_policy_based_on_media_info(self, media: MediaInfo) -> BaseFormatPolicy:
+    def get_policy_based_on_media_info(self, media:VideoRecord) -> BaseFormatPolicy:
         """Primary selection based on probed container name."""
         if not media.has_playable_av:
             self.logger.regular_log(f"No playable streams found for {media.file.name}")
@@ -71,7 +75,7 @@ class PolicyService:
     #     return DefaultPolicy()
 
     # def get_policy_based_on_media_info(
-    #     self, media: MediaInfo
+    #     self, media:VideoRecord
     # ) -> BaseFormatPolicy | None:
 
     #     if not media.has_playable_av:

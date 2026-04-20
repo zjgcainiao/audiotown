@@ -2,7 +2,7 @@ from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from typing import Optional, List
 from pathlib import Path
-from .audio_format import AudioFormat
+from .audio.audio_format import AudioFormat
 from audiotown.utils import make_json_safe
 from audiotown.consts.video.video_container import VideoContainer
 

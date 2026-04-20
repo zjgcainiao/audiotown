@@ -1,7 +1,10 @@
 from dataclasses import dataclass, field
-from typing import Optional
-from .lang_map import LANGUAGE_MAP
+from typing import Optional, Any
+from audiotown.utils import safe_cast
+from ..lang.lang_map import LANGUAGE_MAP
 from .audio_codec import AudioCodec
+
+
 @dataclass(slots=True)
 class AudioStreamSpec:
     codec_name: str | None
@@ -9,6 +12,15 @@ class AudioStreamSpec:
     channels: int | None
     bit_rate: int | None
     bits_per_sample: int | None
+
+    # new fields
+    sample_fmt: str| None
+    channel_layout: str | None
+    dmix_mode: int | None
+    profile: int | None
+
+
+    raw_tags: dict[str, Any] | None  = None  # <--- The "Trash Can" for this specific stream
     # newly added 2024-04-01
     is_default: bool = field(default=False)
     lang: Optional[str] = field(default=None)
@@ -28,3 +40,11 @@ class AudioStreamSpec:
         if self.codec_name in [AudioCodec.AAC.value]:
          return True
         return False
+    
+    @property
+    def is_stereo_channel(self) -> bool:
+       channels = safe_cast(self.channels, int)
+       if channels is not None and channels ==2:
+          return True
+       else:
+          return False

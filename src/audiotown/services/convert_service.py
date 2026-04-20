@@ -8,13 +8,13 @@ from pathlib import Path
 
 # from audiotown.consts.ffmpeg_config import FFmpegConfig
 # from audiotown.consts.app_context import AppContext
-from audiotown.consts.audio_format import AudioFormat
+from audiotown.consts.audio.audio_format import AudioFormat
 from audiotown.consts.birate_tier import BitrateTier
 from audiotown.consts.conversion import ConversionTask, ConversionTaskResult
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from audiotown.services.command_builder_service import CommandBuilderService
 from audiotown.video.policies.target_policy import AppleSafeMp4TargetPolicy
-from audiotown.consts.video import media_info
+from audiotown.consts.video import video_record
 from audiotown.consts.video.policy_decision import PolicyDecision
 from audiotown.consts.video.video_container import VideoContainer
 from audiotown.services.policy_service import PolicyService
@@ -90,7 +90,7 @@ class ConvertService:
 
         if audio_record is None:
             return False, "Unsupported or invalid file."
-        if not audio_record.readable:
+        if not audio_record.is_readable:
             err_msg = (audio_record.error or "").strip()
             if err_msg:
                 return False, f"Error. File unreadable: {err_msg}"
@@ -265,7 +265,7 @@ class ConvertService:
         target: VideoContainer,
         output_path: Path,
     ) -> Tuple[bool, str]:
-        media_info = self.probe_service.probe_video_file(file_path)
+        media_info = self.probe_service.probe_video(file_path)
         if media_info is None:
             return False, "file can't be converted"
         decision = PolicyDecision()
@@ -388,8 +388,8 @@ class ConvertService:
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             # Submit all tasks at once
             future_to_path = {
-                executor.submit(self.convert_task_wrapper, t): t.file_path
-                for t in all_tasks
+                executor.submit(self.convert_task_wrapper, task): task.file_path
+                for task in all_tasks
             }
 
             for future in as_completed(future_to_path):

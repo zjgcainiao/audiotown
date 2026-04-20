@@ -11,3 +11,7 @@ class QualityTier(StrEnum):
     LOSSY_LOW = "lossy_low"
     LOSSY_UNKNOWN = "lossy_unknown"
     UNKNOWN = "unknown"
+
+
+    def proper(self):
+        return self.value.replace("_"," ").title()

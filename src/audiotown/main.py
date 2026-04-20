@@ -1,11 +1,11 @@
 import time
-from audiotown.consts.video.video_container import VideoContainer
+
 import click
 import shutil
 import sys
 import subprocess
 from pathlib import Path
-from sympy import false
+
 from wcwidth import wcswidth
 from typing import Optional, NoReturn, Tuple, Union, List
 from audiotown.utils import (
@@ -20,12 +20,9 @@ from audiotown.utils import (
 
 from audiotown.consts.app_context import AppContext
 from audiotown.consts import (
-    AudioFormat,
-    FFmpegConfig,
+
     BitrateTier,
     AppConfig,
-    TypeSummary,
-    DuplicateGroup,
     CmdArgsConfig,
     ConversionDetail,
     ConversionReport,
@@ -33,6 +30,9 @@ from audiotown.consts import (
     ConversionTaskResult,
     SubcommandName,
 )
+from audiotown.consts.video.video_container import VideoContainer
+from audiotown.consts.audio import AudioFormat, DuplicateGroup
+from audiotown.consts.basics import FFmpegConfig, TypeSummary
 from audiotown.logger import logger, SessionLogger
 from audiotown.report import create_report_for_convert, generate_report_for_stats
 from audiotown.services.scan_service import ScanService
@@ -349,7 +349,7 @@ def convert_cmd(
         )
         for result in conv_task_results
     ]
-    logger.stream(f"Debug: conv_task_results [:2]: {conv_task_results [:2]}...")
+    # logger.stream(f"Debug: conv_task_results [:2]: {conv_task_results [:2]}...")
     success_count = sum(1 for r in conv_task_results if r.success)
     total_count = len(conv_task_results)
     failed_count = total_count - success_count
@@ -475,20 +475,17 @@ def stats_cmd(
         fill_char=click.style("█", fg="cyan", bold=True),
         empty_char=click.style("░", fg="white", dim=True),
     ) as bar:
-        stats = scan_service.get_folder_stats(
+        stats = scan_service.get_audio_folder_stats(
             files=all_files,
-            # ffprobe_path=app_context.ff_config.ffprobe_path,
             folder_path=folder,
             # progress_callback=lambda done, total: bar.update(1),
             progress_callback=_on_progress,
         )
 
     logger.stream(f"{div_section_line("Stats", 2)}\n")
-    # logger.stream(f'app_context.ff_config: {app_context.ff_config}\n')
-    # logger.stream(f'all_files[1]: {all_files[1]}\n')
     # logger.stream(f'stats: {stats}')
     total_size_bytes = 0
-    total_gb = stats.total_bytes / app_config.GIGA_BYTES
+    total_gb = stats.total_size_bytes / app_config.GIGA_BYTES
     # hour_format = (
     #     f"{stats.total_duration_sec/app_config.SECS_PER_DAY:,.1f} days"
     #     if stats.total_duration_sec / app_config.SECS_PER_HOUR > 200
@@ -499,15 +496,15 @@ def stats_cmd(
         f"Your library can play {hour_format} in one row, contains {stats.total_files:,} files, and takes up {total_gb:.1f} GB.",
     )
 
-    sorted_artists = sorted(stats.artists.items(), key=sort_logic)
+    sorted_artists = sorted(stats.by_artist.items(), key=sort_logic)
     top_artists = sorted_artists[:tops]
     if top_artists and top_artists[0]:
         top_one_artist, top_one_data = top_artists[0]
         logger.stream(
-            f"You collect work from {len(stats.artists):,} distinct artists. The top one in your list is {str(top_one_artist)} ({top_one_data.count} songs)."
+            f"You collect work from {len(stats.by_artist):,} distinct artists. The top one in your list is {str(top_one_artist)} ({top_one_data.count} songs)."
         )
 
-    sorted_genres = sorted(stats.genres.items(), key=sort_logic)
+    sorted_genres = sorted(stats.by_genre.items(), key=sort_logic)
     top_genres = sorted_genres[:tops]
     if top_genres:
         top_one_genre, top_genre_data = top_genres[0]
@@ -527,10 +524,10 @@ def stats_cmd(
         family_str = f"{safe_division(100*data.count, stats.total_files):>4.0f} % is {family_name.title()}"
         logger.stream(family_str)
     logger.stream(" ")
-    readable_str = f"{safe_division(100 * stats.readable_files, stats.total_files ):>4.0f} % is readable"
+    readable_str = f"{safe_division(100 * stats.total_readable, stats.total_files ):>4.0f} % is readable"
     logger.stream(f"{readable_str}")
 
-    unreadable_str = f"{safe_division(100* (stats.total_files-stats.readable_files), stats.total_files ):>4.0f} % is unreadable"
+    unreadable_str = f"{safe_division(100* (stats.total_files-stats.total_readable), stats.total_files ):>4.0f} % is unreadable"
     logger.stream(f"{unreadable_str}\n")
 
     # embedded artwork
@@ -559,7 +556,7 @@ def stats_cmd(
         bloated_str = ""
 
     # logger.stream("\n")
-    if safe_division(100 * stats.readable_files, stats.total_files) or 0 > 0.95:
+    if safe_division(100 * stats.total_readable, stats.total_files) or 0 > 0.95:
         comment_str = "Your media library looks healthy. Majority of your records are readable and in good conditions."
         logger.stream(f"{comment_str}\n", bold=True, fg="green")
     else:
@@ -589,16 +586,16 @@ def stats_cmd(
         )
 
     # Total for File Distribution
-    total_gb = stats.total_bytes / (1024**3)
+    total_gb = stats.total_size_bytes / (1024**3)
     logger.stream(
         f"  {ljust_display(sub_total_name, label_width)} : {len(stats.by_ext):>7,} \n",
         dim=True,
     )
 
     # --- 2. Artists (by file count) ---
-    if stats.artists:
+    if stats.by_artist:
         logger.stream(
-            f"Top {min(tops,len(stats.artists))} Artists (by file count):",
+            f"Top {min(tops,len(stats.by_artist))} Artists (by file count):",
             fg="cyan",
             bold=True,
         )
@@ -614,18 +611,18 @@ def stats_cmd(
             count = data.count
             logger.stream(f"  {ljust_display(artist, max_artist_len)}: {count}")
         logger.stream(
-            f"  {ljust_display('Total # of Artists', max_artist_len)}: {len(stats.artists):,}\n",
+            f"  {ljust_display('Total # of Artists', max_artist_len)}: {len(stats.by_artist):,}\n",
             dim=True,
         )
 
     # --- 3. Albums (Sorted A-Z) ---
-    if stats.albums:
+    if stats.by_album:
         logger.stream(
-            f"Top {min (tops,len(stats.albums))} Albums (by file count):",
+            f"Top {min (tops,len(stats.by_album))} Albums (by file count):",
             fg="cyan",
             bold=True,
         )
-        sorted_albums = sorted(stats.albums.items(), key=sort_logic)
+        sorted_albums = sorted(stats.by_album.items(), key=sort_logic)
         top_albums = sorted_albums[:tops]
         label_width = (
             max(
@@ -638,14 +635,14 @@ def stats_cmd(
             count = data.count
             logger.stream(f"  {ljust_display(album, label_width)}: {count:>7,}")
         logger.stream(
-            f"  {ljust_display('Total # of Albums', label_width)}: {len(stats.albums):>7,}\n",
+            f"  {ljust_display('Total # of Albums', label_width)}: {len(stats.by_album):>7,}\n",
             dim=True,
         )
 
     # --- 4. Top Genres (Still sorted by count, then A-Z) ---
-    if stats.genres:
+    if stats.by_genre:
         logger.stream(
-            f"Top {min(app_config.TOPS,len(stats.genres))} Genres (by file count):",
+            f"Top {min(app_config.TOPS,len(stats.by_genre))} Genres (by file count):",
             fg="cyan",
         )
 
@@ -661,7 +658,7 @@ def stats_cmd(
             count = data.count
             logger.stream(f"  {genre:<{label_width}}: {count:>7,}")
         logger.stream(
-            f"  {ljust_display(sub_total_name, label_width)}: {len(stats.genres):>7,}\n",
+            f"  {ljust_display(sub_total_name, label_width)}: {len(stats.by_genre):>7,}\n",
             dim=True,
         )
     if len(stats.by_tier):
@@ -697,12 +694,12 @@ def stats_cmd(
             dim=True,
         )
 
-    if find_duplicate and len(stats.fingerprints):
+    if find_duplicate and len(stats.by_fingerprint):
 
         sub_total_name = "total # of dupl. groups"
         waste_size_string = "potential waste size to save"
         duplicate_items = [
-            (key, val) for key, val in stats.fingerprints.items() if val.count > 1
+            (key, val) for key, val in stats.by_fingerprint.items() if val.count > 1
         ]
         sorted_fps = sorted(duplicate_items, key=sort_logic)
         label_width = (

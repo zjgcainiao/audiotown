@@ -7,11 +7,12 @@ from datetime import datetime
 from pathlib import Path
 from audiotown.logger import SessionLogger, logger
 from audiotown.consts import (
-    AudioFolderStats,
-    AudiotownEncoder,
+
     ConversionReport,
     MetaContent,
 )
+from audiotown.consts.audio import AudioFolderStats
+from audiotown.encoders import AudiotownEncoder
 from dataclasses import asdict
 
 def create_report_for_convert(

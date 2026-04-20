@@ -1,6 +1,7 @@
+from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Any
+from typing import  Any
 
 
 @dataclass(slots=True)
@@ -11,7 +12,7 @@ class StreamInfo:
 
 
     @classmethod
-    def from_ffprobe_json(cls, file:Path, raw_json: Dict[str, Any]) -> "StreamInfo":
+    def from_ffprobe_json(cls, file:Path, raw_json: dict[str, Any]) -> StreamInfo:
         """
         Safely extracts 'streams' and 'format' from the raw ffprobe JSON.
         """

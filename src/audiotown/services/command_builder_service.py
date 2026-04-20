@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Optional, List
-from audiotown.consts import ffmpeg_config
-from audiotown.consts.audio_format import AudioFormat
+from audiotown.consts.basics import ffmpeg_config
+from audiotown.consts.audio.audio_format import AudioFormat
 from audiotown.consts.video import (
     PolicyDecision,
     SpeedProfile,
@@ -17,19 +17,21 @@ from audiotown.consts.video.pixel_format_policy import PixelFormatPolicy
 from audiotown.consts.video.quality_profile import QualityProfile
 from audiotown.consts.video.video_encoder import VideoEncoder
 from audiotown.consts.video.video_container import VideoContainer
-from audiotown.consts.video.media_info import MediaInfo
-from audiotown.consts.video.lang_map import LANGUAGE_MAP
+from audiotown.consts.video.video_record import VideoRecord
+from audiotown.consts.lang.lang_map import LANGUAGE_MAP
 from audiotown.logger import logger, SessionLogger
 from typing import Sequence, TypeVar
 
 # generic type placeholer
 T = TypeVar("T")
 
+
 @dataclass(slots=True)
 class CommandBuilderOption:
     input_folder: Optional[Path] = None
     output_folder: Optional[Path] = None
     note: Optional[str] = None
+
 
 class CommandBuilderService:
     def __init__(
@@ -43,7 +45,7 @@ class CommandBuilderService:
         # self.options = options  # Global settings like bitrate, output folder
 
     def build(
-        self, media_info: MediaInfo, output_path: Path, decision: PolicyDecision
+        self, media_info: VideoRecord, output_path: Path, decision: PolicyDecision
     ) -> list[str]:
 
         argv = [self.ffmpeg_path, "-hide_banner", "-loglevel", "error", "-y"]
@@ -90,7 +92,7 @@ class CommandBuilderService:
 
             # Subtitle Mapping: Only map what we can actually handle
             sub_streams = (
-                media_info.subtitle_streams if media_info.has_subtitles else []
+                media_info.subtitle_streams if media_info.has_subtitle else []
             )
             eligible_subs = [s for s in sub_streams if s.is_mp4_text_compatible]
 
@@ -151,7 +153,7 @@ class CommandBuilderService:
 
     def _generate_output_path(
         self,
-        media: MediaInfo,
+        media: VideoRecord,
         output_folder: Path,
         target_container: VideoContainer = VideoContainer.MP4,
     ) -> str | None:
@@ -264,7 +266,7 @@ class CommandBuilderService:
     def _apply_language_and_default_preferences(
         self,
         # args: list[str],
-        media: MediaInfo,
+        media: VideoRecord,
         decision: PolicyDecision,
     ) -> list[str]:
         args: list[str] = []

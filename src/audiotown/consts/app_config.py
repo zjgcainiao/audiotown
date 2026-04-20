@@ -1,12 +1,12 @@
 import os
 from dataclasses import dataclass, field, asdict, is_dataclass
-from typing import Optional, Tuple, Dict, List, Any, cast, Set, DefaultDict
+from typing import Set
 from collections import Counter, defaultdict
 from functools import partial
 from audiotown.utils import to_int, div_blocks, extract_year_from_str, sanitize_metadata
-from .ffmpeg_config import FFmpegConfig
+from .basics.ffmpeg_config import FFmpegConfig
 from .birate_tier import BitrateTier
-from .audio_format import AudioFormat
+from .audio.audio_format import AudioFormat
 import audiotown
 
 

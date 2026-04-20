@@ -6,6 +6,15 @@
 2. It preserves important metadata during conversion, including artist, album, track information, and embedded artwork.
 3. In practical use, it can scan a folder with roughly 13,000 files in about 50-60 seconds, making it suitable for large personal libraries.
 
+## whats new
+
+1. added video upgrade feature via `--to-video` flag. it trancodes (converts) legacy `AVI` and `RMVB` files into Apple safe MP4. 
+   1. Output format: H264/AAC 192K
+   2. Maximium compability with Apple Hardwares, including iPhone 4 or later.
+   3. `audiotown convert '/my/path/to/video_folder/' --to-video=mp4`
+2. improved terminal output.
+3. Bug fixing.
+
 ## Prefer a Mac app instead?
 
 If you are interested in a native macOS app for this workflow, check out Audiotown Pro.
@@ -32,10 +41,13 @@ It brings the same core idea into a dedicated desktop experience: scan your libr
    3. `convert` searches files recursively so I can specify a high-level `folder` like `Media` or `myMediaHub`. Try with one ablum folder first.
    4. `convert` supports `--bitrate` when the `--encoder=aac` is specified. the default bitrate kbps is `256k`. `128k` and `320k` are the other valid inputs.
    5. `convert` by default tries to add artwork into files when converting. It searches for `cover.jpg` or `library.jpg` at the root of the folder. if the source file does not contain an artwork, the command attempts to find such file and embed it into the output whenever possible.
+5. `convert` now supports a new video transcode flag `--to-video=mp4`. It tranforms the old AVI files into Apple ready MP4. Output files will be saved under a new subfolder named `audiotown_exported`.
+
 
 ## Demo
 - ![convert demo](https://raw.githubusercontent.com/zjgcainiao/audiotown/main/docs/demo_convert.png)
 - ![stats demo](https://raw.githubusercontent.com/zjgcainiao/audiotown/main/docs/demo_stat.png)
+- ![stats demo](docs/avi-rmvb-convert.png)
 
 # Installation
 1. Ensure I have [FFmpeg](https://ffmpeg.org/download.html) installed on the system. It is the powerhouse that does the conversion and other heavy work like probing `ffprobe`. Will need it installed and working. MacOS users can install it via [homebrew](https://formulae.brew.sh/formula/ffmpeg): `brew install ffmpeg`.
@@ -105,6 +117,9 @@ audiotown convert . --report-path=.
 audiotown convert . --codec=alac --report-path=. --dry-run
 audiotown convert . --codec=aac --bitrate=256k --report-path=. --dry-run
 
+
+# 5. video upgrade. source formats: AVI, RMVB
+audiotown convert '/my/path/to/video_folder/' --to-video=mp4 --report-path
 ```
 
 ## Advanced Options
@@ -147,6 +162,9 @@ audiotown convert . --codec=aac --bitrate=256k --report-path=. --dry-run
     cd /my/media/folder
     audiotown stats . --find-duplicate
     ```
+    5. video transcoding
+      ```zsh
+      ```
 ## 🤝 Contributing
 
 `Audiotown` is a labor of love built to handle my own 100GB+ library. If you find a file that crashes the scan, or if you have an idea to make the Apple-conversion even smoother, I’d love your input!

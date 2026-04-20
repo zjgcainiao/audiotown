@@ -7,7 +7,7 @@ from typing import Optional, cast
 from audiotown.logger import SessionLogger
 from .app_config import AppConfig
 from .meta_content import MetaContent
-from .ffmpeg_config import FFmpegConfig
+from .basics.ffmpeg_config import FFmpegConfig
 from audiotown.services.probe_service import ProbeService
 from audiotown.services.scan_service import ScanService
 from audiotown.services import ConvertService, PolicyService, CommandBuilderService

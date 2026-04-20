@@ -9,7 +9,7 @@ from .video_codec import VideoCodec
 from .quality_profile import QualityProfile
 from .pixel_format_policy import PixelFormatPolicy
 from .compatiblity_level import CompatibilityLevel
-from audiotown.consts import AudioFormat
+from audiotown.consts.audio.audio_format import AudioFormat
 
 
 @dataclass(slots=True)

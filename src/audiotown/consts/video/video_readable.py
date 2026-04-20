@@ -1,9 +1,8 @@
+from enum import StrEnum
 
-from enum import Enum, StrEnum
-
-class AudioReadable(StrEnum):
+class VideoReadable(StrEnum):
     READABLE = "readable"
-    UNREADABLE = "unreadable_or_corrupt"
+    UNREADABLE = "unreadable"
     
     @classmethod
     def get_value(cls, key: str) -> str:
@@ -17,4 +16,6 @@ class AudioReadable(StrEnum):
             return cls[label.upper()]
         except (KeyError, AttributeError):
             return None  # Or return cls.MEDIUM as a safe fallback
-
+    
+    def proper(self):
+        return self.value.replace("_"," ").title()

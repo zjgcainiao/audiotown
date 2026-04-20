@@ -1,9 +1,9 @@
 from .base_format import BaseFormatPolicy
-from audiotown.consts.video import MediaInfo, PolicyDecision, MediaAction
+from audiotown.consts.video import VideoRecord, PolicyDecision, MediaAction
 
 class AVIPolicy(BaseFormatPolicy):
 
-    def apply(self, media: MediaInfo, decision: PolicyDecision) -> None: 
+    def apply(self, media:VideoRecord, decision: PolicyDecision) -> None: 
         file = media.file
         if file is None:
             return 

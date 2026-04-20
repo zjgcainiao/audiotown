@@ -1,8 +1,8 @@
 from .base_format import BaseFormatPolicy
-from audiotown.consts.video import MediaInfo, PolicyDecision, MediaAction
+from audiotown.consts.video import VideoRecord, PolicyDecision, MediaAction
 
 class MP4Policy(BaseFormatPolicy):
-    def apply(self, media: MediaInfo, decision: PolicyDecision) -> None:
+    def apply(self, media:VideoRecord, decision: PolicyDecision) -> None:
         video = media.first_video_stream
         if not video:
             return

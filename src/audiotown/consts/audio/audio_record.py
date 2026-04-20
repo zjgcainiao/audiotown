@@ -2,14 +2,15 @@
 from dataclasses import dataclass, field
 from pathlib import Path
 from token import OP
-from typing import Optional
-
+from typing import Optional, Any
+from functools import cached_property
 from audiotown.utils import safe_cast
 from sympy import false
 from .audio_family import AudioFamily
 from .audio_format import AudioFormat
 from .quality_tier import QualityTier
-
+from audiotown.consts.basics.attached_pic_spec import AttachedPicSpec
+from audiotown.consts.lang.detected_language import DetectedLanguage
 @dataclass(slots=True)
 class AudioRecord:
     file_path: Path
@@ -17,12 +18,12 @@ class AudioRecord:
     audio_format: Optional[AudioFormat] = None
 
     # common tags (what you aggregate on)
-    year: Optional[str] = None
-    artist: Optional[str] = None
-    album: Optional[str] = None
-    title: Optional[str] = None
-    genre: Optional[str] = None
-    track: Optional[str] = None
+    year: str | None  = None
+    artist: str | None  = None
+    album: str | None  = None
+    title: str | None  = None
+    genre: str | None  = None
+    track: str | None  = None
 
     bitrate_bps: Optional[int] = None
     sample_rate_hz: Optional[int] = None
@@ -32,15 +33,23 @@ class AudioRecord:
     duration_sec: Optional[float] = None
 
     # status
-    readable: bool = field(default=True)
-    error: Optional[str] = None
-    fingerprint: Optional[str] = " _ "  # Calculated at creation
+    is_readable: bool = field(default=True)
+    error: str | None  = None
+    fingerprint: str | None  = " _ "  # Calculated at creation
 
     # default
     has_embedded_artwork: bool = field(default=False)
 
+    # new field raw_tags
+    channel_layout: str | None = None
+    nb_streams: int | None = None
+    probe_score: int | None = None
+    sample_fmt: str | None = None
+    raw_tags: dict[str, Any] | None = None
+    attached_pics: list[AttachedPicSpec] = field(default_factory=list)
+
     @property
-    def custom_fingerprint(self) -> Optional[str]:
+    def custom_fingerprint(self) -> str | None :
         """
         Duplicate heuristic:
         - normalized artist + title
@@ -58,13 +67,21 @@ class AudioRecord:
     def bitrate_kbps(self) -> Optional[float]:
         if self.bitrate_bps is None:
             return None
-        return safe_cast(self.bitrate_bps, float)/1000.0
+    
+        return float(self.bitrate_bps)/1000.0 if safe_cast(self.bitrate_bps, float) is not None else None
 
     @property
     def sample_rate_khz(self) -> Optional[float]:
         if self.sample_rate_hz is None:
             return None
         return self.sample_rate_hz / 1000 
+    
+    @property 
+    def is_stereo_channel(self) -> bool:
+        if self.channels is not None and self.channels==2:
+            return True
+        else:
+            return False
 
     def find_external_cover_art(self, folder_path: Path) -> Optional[Path]:
         valid_names = {"cover", "folder", "front", "album"}
@@ -86,7 +103,7 @@ class AudioRecord:
         return None
 
     def family(self) -> Optional[AudioFamily]:
-        if not self.readable:
+        if not self.is_readable:
             return AudioFamily.UNKNOWN
         if self.audio_format is None:
             return AudioFamily.UNKNOWN
@@ -178,7 +195,7 @@ class AudioRecord:
         """
         The one function you call everywhere.
         """
-        if not self.readable:
+        if not self.is_readable:
             return QualityTier.UNKNOWN
         fam = self.family()
         if fam == AudioFamily.LOSSLESS:
@@ -222,3 +239,25 @@ class AudioRecord:
         if self.is_pcm() and s_rate or 0 > 192 * 1000:
             return True
         return False
+
+    def has_attached_pic(self) -> bool:
+        if self.attached_pics is not None and len(self.attached_pics) > 0:
+            return True
+
+        return False
+    
+
+    @property
+    def detected_language(self) -> DetectedLanguage:
+        """Analyzes combined metadata to detect script and language."""
+        # Join components into a single 'fingerprint' string
+        tags_str = " ".join(self.raw_tags) if self.raw_tags else ""
+        text_to_analyze = f"{self.title} {self.file_path} {tags_str}"
+        
+        # One-line instantiation
+        return DetectedLanguage.from_text(text_to_analyze)
+
+    @property
+    def detected_primary_language_name(self) -> str:
+        """The user-facing string for the dashboard."""
+        return self.detected_language.primary_identity.value.title()

@@ -18,9 +18,12 @@ class AppleCompatibility(StrEnum):
 
         - UNKNOWN
             Not readable enough to classify, or classification is inconclusive.
-        """
-    DIRECT_PLAY = "direct play"
-    NEEDS_REMUX = "needs remux"
-    NEEDS_TRANSCODE = "needs transcode"
+    """
+    DIRECT_PLAY = "direct play ready"
+    NEEDS_REMUX = "upgradable (quick)"
+    NEEDS_TRANSCODE = "upgradable (longer)"
     UNSUPPORTED_STRUCTURE = "unsupported"
     UNKNOWN = "unknown"
+
+    def proper(self):
+        return self.value.replace("_"," ").title()

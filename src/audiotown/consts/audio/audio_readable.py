@@ -1,11 +1,10 @@
 
 from enum import StrEnum
 
-class BitrateTier(StrEnum):
-    HIGH = "320k"
-    MEDIUM = "256k"
-    LOW = "128k"
-
+class AudioReadable(StrEnum):
+    READABLE = "readable"
+    UNREADABLE = "unreadable"
+    
     @classmethod
     def get_value(cls, key: str) -> str:
         # Allows you to look up "high" and get "320k" safely
@@ -18,10 +17,3 @@ class BitrateTier(StrEnum):
             return cls[label.upper()]
         except (KeyError, AttributeError):
             return None  # Or return cls.MEDIUM as a safe fallback
-
-    @classmethod
-    def supported_bitrates(cls) -> set[str]:
-        # Allows you to look up "high" and get "320k" safely
-
-        a_set = {member.value for member in cls}
-        return a_set
