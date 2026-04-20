@@ -1,6 +1,4 @@
 from pathlib import Path
-from typing import Optional
-
 from audiotown.consts.video.video_record import VideoRecord, VideoContainer
 from audiotown.video.policies.avi import AVIPolicy
 from audiotown.video.policies.mkv import MKVPolicy

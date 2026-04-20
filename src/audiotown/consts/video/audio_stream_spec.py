@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from typing import Optional, Any
 from audiotown.utils import safe_cast
-from ..lang.lang_map import LANGUAGE_MAP
+from audiotown.consts.lang.lang_map import LANGUAGE_MAP
 from .audio_codec import AudioCodec
 
 

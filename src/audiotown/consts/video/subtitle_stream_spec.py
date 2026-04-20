@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from typing import Optional, Any
-from ..lang.lang_map import LANGUAGE_MAP
+from audiotown.consts.lang.lang_map import LANGUAGE_MAP
 
 @dataclass(slots=True)
 class SubtitleStreamSpec:

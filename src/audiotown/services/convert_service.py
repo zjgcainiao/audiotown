@@ -18,7 +18,7 @@ from audiotown.consts.video import video_record
 from audiotown.consts.video.policy_decision import PolicyDecision
 from audiotown.consts.video.video_container import VideoContainer
 from audiotown.services.policy_service import PolicyService
-from torch import cat
+
 
 from .probe_service import ProbeService
 from audiotown.utils import find_external_cover

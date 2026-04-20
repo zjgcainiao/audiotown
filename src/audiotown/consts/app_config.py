@@ -1,6 +1,5 @@
 import os
 from dataclasses import dataclass, field, asdict, is_dataclass
-from typing import Set
 from collections import Counter, defaultdict
 from functools import partial
 from audiotown.utils import to_int, div_blocks, extract_year_from_str, sanitize_metadata
@@ -15,10 +14,10 @@ import audiotown
 class AppConfig:
     # ff_config: Optional[FFmpegConfig] = None
     version: str = field(default=audiotown.__version__)
-    supported_bitrates: Set[str] = field(default_factory=BitrateTier.supported_bitrates)
+    supported_bitrates: set[str] = field(default_factory=BitrateTier.supported_bitrates)
     divs_lvl1: str = field(default=div_blocks(10, "= "))
     divs_lvl2: str = field(default=div_blocks(5, "- "))
-    supported_extensions: Set[str] = field(
+    supported_extensions: set[str] = field(
         default_factory=AudioFormat.supported_extensions
     )
     MAX_WORKERS: int = field(default_factory=lambda: min(32, (os.cpu_count() or 4) * 2)-1)
