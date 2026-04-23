@@ -1,5 +1,6 @@
 # from enum import StrEnum
 from pathlib import Path
+import logging
 from typing import Any, Optional
 from dataclasses import dataclass, field
 
@@ -15,6 +16,8 @@ from audiotown.consts.basics.attached_pic_spec import AttachedPicSpec
 from .attachment_stream_spec import AttachmentStreamSpec
 from itertools import chain
 from audiotown.consts.lang.lang_map import LANGUAGE_MAP, map_language
+
+logger = logging.getLogger(__name__)
 
 @dataclass(slots=True)  
 class VideoRecord:
@@ -124,7 +127,7 @@ class VideoRecord:
         return dict(counts)
 
     @property
-    def apple_compatibility(self) -> AppleCompatibility:
+    def apple_compatibility(self) -> AppleCompatibility: 
         """Check the general playback compatiblie in apple devices.
         The function checks the video codecs and audio codecs from each stream.
         subtitle stream
@@ -137,6 +140,11 @@ class VideoRecord:
         Returns:
             AppleCompatibility: _description_
         """
+
+        logger.info(f"...in apple_compatiblity of VideoRecord. v.is_apple_ready of self.video_streams: {[v.is_apple_ready for v in self.video_streams]}")
+        logger.info(f"...in apple_compatiblity of VideoRecord. v.pix_fmt of self.video_streams: {[v.pix_fmt for v in self.video_streams]}")
+
+
         if not self.is_readable:
             return AppleCompatibility.UNKNOWN
         if not self.has_audio or not self.has_video:
@@ -148,13 +156,34 @@ class VideoRecord:
         if all(v.is_apple_ready for v in self.video_streams) and all(a.is_apple_ready for a in self.audio_streams):
             if self.container_name == VideoContainer.MP4:
                 return AppleCompatibility.DIRECT_PLAY
-            else: 
-                return AppleCompatibility.NEEDS_REMUX
+            if self.container_name == VideoContainer.M4V:
+                if any(vi.is_drm_protected for vi in self.video_streams) and any(au.is_drm_protected for au in self.audio_streams):
+                    return AppleCompatibility.DRM_PROTECTED
+                else:
+                    return AppleCompatibility.DIRECT_PLAY
+            return AppleCompatibility.NEEDS_REMUX
         else:
             if self.file.suffix.lower() in VideoContainer.supported_suffixes():
+                if self.container_name == VideoContainer.MP4:
+                    return AppleCompatibility.NEEDS_REMUX
+                if self.container_name == VideoContainer.M4V:
+                    if any(vi.is_drm_protected for vi in self.video_streams) and any(au.is_drm_protected for au in self.audio_streams):
+                        return AppleCompatibility.DRM_PROTECTED
+                else:
+                    return AppleCompatibility.NEEDS_REMUX
                 return AppleCompatibility.NEEDS_TRANSCODE
             else: 
                 return AppleCompatibility.UNSUPPORTED_STRUCTURE
+
+    @property
+    def is_apple_protected_media(self) -> bool:
+        is_protected = False
+        if not self.has_playable_av:
+            return False
+        for v_stream in self.video_streams:
+            is_protected = v_stream.is_drm_protected and v_stream.codec_tag_string in {"drmi", "drms"}
+            continue
+        return is_protected
 
     @property
     def languages(self) -> set[str | None]:
@@ -178,24 +207,4 @@ class VideoRecord:
             if (l := getattr(s, 'lang', None)) and l.lower() != "und"
         }   
         return result  
-
-    # @property
-    # def languages(self) -> set:
-    #     lang_list=set()
-    #     if not self.is_readable:
-    #         return lang_list
-
-    #     if self.has_video:
-    #         for stream in self.video_streams:
-    #             lang = stream.lang
-    #             if lang is not None and lang.lower() != "und":
-    #                 lang_list.add(lang.lower())
-    #     if self.has_audio:
-    #         for stream in self.audio_streams:
-    #             lang = stream.lang
-    #             if lang is not None and lang.lower() != "und":
-    #                 lang_list.add(lang.lower())
-        
-    #     return lang_list
-            
 

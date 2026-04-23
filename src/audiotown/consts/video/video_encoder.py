@@ -16,6 +16,20 @@ class VideoEncoder(StrEnum):
             return VideoCodec.HEVC
         raise ValueError(f"Unsupported video encoder: {self}")
 
+    @classmethod
+    def from_video_codec(
+        cls,
+        video_codec: VideoCodec,
+        use_videotoolbox: bool = False,
+    ) -> "VideoEncoder | None":
+        if video_codec == VideoCodec.H264:
+            return cls.H264_VIDEOTOOLBOX if use_videotoolbox else cls.LIBX264
+        if video_codec == VideoCodec.HEVC:
+            return cls.HEVC_VIDEOTOOLBOX if use_videotoolbox else cls.LIBX265
+        # raise ValueError(f"No supported encoder mapping for codec: {video_codec}")
+        return None
+
+
 
 @dataclass(frozen=True, slots=True)
 class VideoEncoderSpec:

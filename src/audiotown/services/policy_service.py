@@ -16,7 +16,7 @@ class PolicyService:
         VideoContainer.AVI: AVIPolicy,
         VideoContainer.MKV: MKVPolicy,
         VideoContainer.RMVB: RMVBPolicy,
-        # VideoContainer.MP4: MP4Policy,
+        VideoContainer.MP4: MP4Policy,
     }
 
     def __init__(self, service_logger: SessionLogger = logger):
@@ -26,7 +26,7 @@ class PolicyService:
         VideoContainer.AVI: AVIPolicy,
         VideoContainer.MKV: MKVPolicy,
         VideoContainer.RMVB: RMVBPolicy,
-        # VideoContainer.MP4: MP4Policy,
+        VideoContainer.MP4: MP4Policy,
         
         
         }
@@ -47,15 +47,15 @@ class PolicyService:
         policy_class = self._POLICY_MAP.get(container, DefaultPolicy)
         return policy_class()
 
-    def get_policy_based_on_media_info(self, media:VideoRecord) -> BaseFormatPolicy:
+    def get_policy_based_on_video_record(self, video_record: VideoRecord) -> BaseFormatPolicy:
         """Primary selection based on probed container name."""
-        if not media.has_playable_av:
-            self.logger.regular_log(f"No playable streams found for {media.file.name}")
+        if not video_record.has_playable_av:
+            self.logger.regular_log(f"No playable streams found for {video_record.file.name}")
             return DefaultPolicy()
 
-        if media.container_name is None:
+        if video_record.container_name is None:
             return DefaultPolicy()
-        policy_class = self._POLICY_MAP.get(media.container_name, DefaultPolicy)
+        policy_class = self._POLICY_MAP.get(video_record.container_name, DefaultPolicy)
         
         # Update state and return
         self.selected_policy = policy_class()
@@ -76,12 +76,12 @@ class PolicyService:
     #     self, media:VideoRecord
     # ) -> BaseFormatPolicy | None:
 
-    #     if not media.has_playable_av:
+    #     if not video_record.has_playable_av:
     #         self.selected_policy = None
-    #     if media.container_name == VideoContainer.AVI:
+    #     if video_record.container_name == VideoContainer.AVI:
     #         self.selected_policy = AVIPolicy()
-    #     elif media.container_name == VideoContainer.RMVB:
+    #     elif video_record.container_name == VideoContainer.RMVB:
     #         self.selected_policy = RMVBPolicy()
-    #     elif media.container_name == VideoContainer.MKV:
+    #     elif video_record.container_name == VideoContainer.MKV:
     #         self.selected_policy =MKVPolicy()
     #     return self.selected_policy

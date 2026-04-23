@@ -7,10 +7,6 @@ class PixelFormatPolicy(StrEnum):
     YUV420P_10LE ='yuv420p10le'
 
 
-
-from enum import StrEnum
-
-
 class PixelFormat(StrEnum):
     YUV420P = "yuv420p"
     YUV420P10LE = "yuv420p10le"
@@ -108,10 +104,9 @@ class PixelFormat(StrEnum):
             cls.BGR48LE,
         }
 
-    
 
     @classmethod
-    def yuv420_formats(cls) -> set[str]:
+    def yuv420_formats(cls) -> set["PixelFormat"]:
         return {
             cls.YUV420P,
             cls.YUV420P10LE,
@@ -126,6 +121,11 @@ class PixelFormat(StrEnum):
             cls.YUVA420P10LE,
         }   
     
+
+    @property
+    def is_420(self) -> bool:
+        return self in type(self).yuv420_formats()
+         
     @property
     def is_8bit(self) -> bool:
         if self in PixelFormat.eight_bit_formats():

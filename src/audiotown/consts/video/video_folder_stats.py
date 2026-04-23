@@ -3,7 +3,7 @@ import logging
 from pathlib import Path
 from dataclasses import dataclass, field
 from collections import defaultdict
-from audiotown.utils import safe_cast
+from audiotown.consts.lang import LANG_DISPLAY_NAMES
 
 from audiotown.consts.basics.type_summary import TypeSummary
 from .video_duplicate_group import VideoDuplicateGroup
@@ -117,7 +117,7 @@ class VideoFolderStats:
         # lets fucking do `by_resolution`, `bit_depth` and `by_video_codec`
         if video.video_stream_count > 0:
             for idx, item in enumerate(video.video_streams):
-                resolution = str(item.resolution) # or ""
+                resolution = str(item.semantic_resolution_label()) # or ""
                 video_codec = str(item.codec_name) or ""
                 bit_depth = str(item.bit_depth)
                 self._bump(self.by_resolution, resolution, size)
@@ -136,7 +136,7 @@ class VideoFolderStats:
         # add do `by_language`
         if video.languages and len(video.languages) > 0:
             for lang in filter(None, video.languages):
-                self._bump(self.by_language, lang, size)
+                self._bump(self.by_language, LANG_DISPLAY_NAMES.get(lang, lang), size)
             # for lang in video.languages:
             #     if lang is not None:
             #         self._bump(self.by_language, lang, size)

@@ -1,19 +1,17 @@
 from pathlib import Path
-from typing import Optional, List
-from audiotown.consts.basics import ffmpeg_config
+from dataclasses import dataclass
 from audiotown.consts.audio.audio_format import AudioFormat
+from audiotown.consts.audio.audio_bitrate_kbps import AudioBitRateKbps
 from audiotown.consts.video import (
     PolicyDecision,
-    SpeedProfile,
     SubtitleMode,
-    SubtitleStreamSpec,
-    VideoCodec,
-    AudioStreamSpec,
     MediaAction,
-)
-from dataclasses import dataclass
 
-from audiotown.consts.video.pixel_format_policy import PixelFormatPolicy
+)
+
+
+from audiotown.consts.video.pixel_format_policy import PixelFormat
+from audiotown.consts.video.policy_decision import StreamDecision
 from audiotown.consts.video.quality_profile import QualityProfile
 from audiotown.consts.video.video_encoder import VideoEncoder
 from audiotown.consts.video.video_container import VideoContainer
@@ -22,15 +20,18 @@ from audiotown.consts.lang.lang_map import LANGUAGE_MAP
 from audiotown.logger import logger, SessionLogger
 from typing import Sequence, TypeVar
 
+
+
+# logger = logging.getLogger(__name__)
 # generic type placeholer
 T = TypeVar("T")
 
 
 @dataclass(slots=True)
 class CommandBuilderOption:
-    input_folder: Optional[Path] = None
-    output_folder: Optional[Path] = None
-    note: Optional[str] = None
+    input_folder: Path | None = None
+    output_folder: Path | None = None
+    note: str | None = None
 
 
 class CommandBuilderService:
@@ -45,7 +46,7 @@ class CommandBuilderService:
         # self.options = options  # Global settings like bitrate, output folder
 
     def build(
-        self, media_info: VideoRecord, output_path: Path, decision: PolicyDecision
+        self, video_record: VideoRecord, output_path: Path, decision: PolicyDecision
     ) -> list[str]:
 
         argv = [self.ffmpeg_path, "-hide_banner", "-loglevel", "error", "-y"]
@@ -53,23 +54,73 @@ class CommandBuilderService:
         if decision.needs_genpts:
             argv.extend(["-fflags", "+genpts"])
 
-        argv.extend(["-i", str(media_info.file)])
+        argv.extend(["-i", str(video_record.file)])
 
-        argv.extend(["-map", "0:v:0"])
-        argv.extend(["-map", "0:a?"])
+        # argv.extend(["-map", "0:v:0"])
+        # argv.extend(["-map", "0:a?"])
         # argv.extend(["-map", "0:s?"])
         # 3. Processing Logic
-        if decision.action == MediaAction.REMUX:
+        if decision.action == MediaAction.SKIP:
+            argv.extend(["-map", "0:v:0"])
+            argv.extend(["-map", "0:a?"])
+
+            # LIGHTNING FAST: Just move the data packets
+            argv.extend(["-c:v", "copy"])
+            argv.extend(["-c:a", "copy"])
+            if video_record.has_subtitle:
+                argv.extend(["-map", "0:s?"])
+                argv.extend(["-c:s", "copy"])
+        elif decision.action == MediaAction.REMUX:
+            argv.extend(["-map", "0:v:0"])
+            argv.extend(["-map", "0:a?"])
             # LIGHTNING FAST: Just move the data packets
             argv.extend(["-c:v", "copy"])
             argv.extend(["-c:a", "copy"])
             # argv.extend(["-c:s", "copy"])
+
         else:
-            # TRANSCODE: The heavy lifting logic
-            if decision.video_encoder:
-                argv.extend(["-c:v", decision.video_encoder.value])
-            if decision.video_encoder == VideoEncoder.LIBX264:
-                argv.extend(self._build_libx264_quality_args(decision))
+            if any([not decision.audio_stream_decisions, not decision.video_stream_decisions]):
+                return argv
+            for v_out_idx, v_decision in enumerate(decision.video_stream_decisions):
+                argv.extend(["-map", f"0:{v_decision.stream_index}"])
+                if v_decision.mode == StreamDecision.COPY:
+                    argv.extend([f"-c:v:{v_out_idx}", "copy"])
+                elif v_decision.mode == StreamDecision.TRANSCODE:
+                    argv.extend([f"-c:v:{v_out_idx}", v_decision.encoder.value if v_decision.encoder is not None else VideoEncoder.LIBX265.value])
+                    # argv.extend([f"-c:v:{v_out_idx}", v_decision.encoder.value])
+
+                    if v_decision.encoder == VideoEncoder.LIBX264:
+                        argv.extend([
+                            f"-crf:v:{v_out_idx}", "20",
+                            f"-preset:v:{v_out_idx}", "medium",
+                            f"-profile:v:{v_out_idx}", "high",
+                            f"-level:v:{v_out_idx}", "4.1",
+                            f"-pix_fmt:v:{v_out_idx}", "yuv420p",
+                            f"-tag:v:{v_out_idx}", "avc1",
+                        ])
+                    elif v_decision.encoder == VideoEncoder.LIBX265:
+                        argv.extend([
+                            f"-crf:v:{v_out_idx}", "22",
+                            f"-preset:v:{v_out_idx}", "medium",
+                            f"-pix_fmt:v:{v_out_idx}", "yuv420p10le",   # or yuv420p
+                            f"-tag:v:{v_out_idx}", "hvc1",
+                        ])
+                    if v_decision.is_vfr and v_decision.target_frame_rate:
+                        argv.extend([
+                            f"-fps_mode:v:{v_out_idx}", "cfr",
+                            f"-r:v:{v_out_idx}", v_decision.target_frame_rate,
+                        ])
+             
+            for audio_out_idx, au_decision in enumerate(decision.audio_stream_decisions):
+                argv.extend(["-map", f"0:{au_decision.stream_index}"])
+
+                if au_decision.mode == StreamDecision.COPY:
+                    argv.extend([f"-c:a:{audio_out_idx}", "copy"])
+                elif au_decision.mode == StreamDecision.TRANSCODE:
+                    argv.extend([f"-c:a:{audio_out_idx}", au_decision.audio_format.codec_name if au_decision.audio_format is not None else AudioFormat.ALAC.codec_name])
+                    if au_decision.bitrate:
+                        argv.extend([f"-b:a:{audio_out_idx}", au_decision.bitrate])
+
 
             # Fixes that only apply during Transcode
             if (
@@ -82,7 +133,8 @@ class CommandBuilderService:
             if decision.ignore_unknown:
                 argv.append("-ignore_unknown")
 
-            argv.extend(["-tag:v", "avc1"])
+            if decision.video_codec is not None:
+                argv.extend(["-tag:v", "avc1"])
 
             audio_format = decision.audio_format
             if audio_format:
@@ -91,8 +143,11 @@ class CommandBuilderService:
                     argv.extend(["-b:a", "192k"])
 
             # Subtitle Mapping: Only map what we can actually handle
+            if decision.subtitle_mode == SubtitleMode.MOV_TEXT_OR_DROP:
+                    argv.append("-sn")
+
             sub_streams = (
-                media_info.subtitle_streams if media_info.has_subtitle else []
+                video_record.subtitle_streams if video_record.has_subtitle else []
             )
             eligible_subs = [s for s in sub_streams if s.is_mp4_text_compatible]
 
@@ -101,24 +156,29 @@ class CommandBuilderService:
                 and decision.subtitle_mode == SubtitleMode.MOV_TEXT_OR_DROP
             ):
                 # Instead of -map 0:s?, we map specifically the ones that fit our policy
-                for stream in eligible_subs:
+                for idx, stream in enumerate(eligible_subs):
                     argv.extend(["-map", f"0:{stream.stream_index}"])
 
-                # Now this global flag is SAFE because we only mapped compatible streams
-                argv.extend(["-c:s", "mov_text"])
-            else:
-                # If no text-compatible subs, we don't map any (the 'DROP' part of your policy)
-                pass
+                    # Now this global flag is SAFE because we only mapped compatible streams
+                    argv.extend([f"-c:s:{idx}", "mov_text"])
+            # else:
+            #     # If no text-compatible subs, we don't map any (the 'DROP' part of your policy)
+            #     pass
 
         argv.extend(
             self._apply_language_and_default_preferences(
-                media=media_info, decision=decision
+                media=video_record, decision=decision
             )
         )
         if decision.faststart:
             argv.extend(["-movflags", "+faststart"])
+        
         # override
         argv.append(str(output_path))
+
+        # logger.regular_log(f'before build() of CommandBuilderService returns...argv:{argv}\n',level=logging.INFO)
+    
+        
         return argv
 
     def _build_libx264_quality_args(self, decision: PolicyDecision) -> list[str]:
@@ -143,11 +203,41 @@ class CommandBuilderService:
         args.extend(["-crf", str(crf_value)])
 
         # 3. Handle Pixel Format
-        if decision.pixel_format_policy == PixelFormatPolicy.YUV420P_SAFE:
-            args.extend(["-pix_fmt", f"{PixelFormatPolicy.YUV420P_SAFE}"])
+        if decision.pixel_format == PixelFormat.YUV420P:
+            args.extend(["-pix_fmt", f"{PixelFormat.YUV420P}"])
 
         # Safe to have. These ensure the H.264 stream doesn't use features too complex for Apple hardware
         args.extend(["-profile:v", "high", "-level", "4.1"])
+
+        return args
+    
+    def _build_libx265_quality_args(self, decision: PolicyDecision) -> list[str]:
+        args = []
+
+        # 1. Handle Preset
+        preset = decision.speed_profile.value if decision.speed_profile else "medium"
+        args.extend(["-preset", preset])
+
+        # 2. Handle CRF (Quality)
+        # Using a map is cleaner than a chain of if/elifs
+        crf_map = {
+            QualityProfile.HIGH: 18,
+            QualityProfile.BALANCED: 22,
+            QualityProfile.LOW: 26,
+        }
+        crf_value = (
+            crf_map.get(decision.quality_profile, 22)
+            if decision.quality_profile is not None
+            else 22
+        )
+        args.extend(["-crf", str(crf_value)])
+
+        # 3. Handle Pixel Format
+        if decision.pixel_format == PixelFormat.YUV420P:
+            args.extend(["-pix_fmt", f"{PixelFormat.YUV420P}"])
+
+        # Safe to have. These ensure the H.264 stream doesn't use features too complex for Apple hardware
+        # args.extend(["-profile:v", "high", "-level", "4.1"])
 
         return args
 
@@ -201,7 +291,7 @@ class CommandBuilderService:
         stream_type: str,  # "a" or "s"
         stream_count: int,
         default_output_index: int | None,
-    ) -> List[str]:
+    ) -> list[str]:
         """
         Builds ffmpeg disposition args for output streams of a given type.
         Clears existing defaults and sets exactly one default when requested.

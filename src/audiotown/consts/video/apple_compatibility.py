@@ -20,9 +20,10 @@ class AppleCompatibility(StrEnum):
             Not readable enough to classify, or classification is inconclusive.
     """
     DIRECT_PLAY = "direct play ready"
-    NEEDS_REMUX = "upgradable (quick)"
-    NEEDS_TRANSCODE = "upgradable (longer)"
+    NEEDS_REMUX = "upgradable - quick"
+    NEEDS_TRANSCODE = "upgradable - slow"
     UNSUPPORTED_STRUCTURE = "unsupported"
+    DRM_PROTECTED = "drm protected - maybe"
     UNKNOWN = "unknown"
 
     def proper(self):

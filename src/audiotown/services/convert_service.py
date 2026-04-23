@@ -1,13 +1,12 @@
 from __future__ import annotations
-from email.mime import audio
-import subprocess
 import json
 import os
-from typing import Concatenate, Optional, Tuple, List, Callable
+import subprocess
+from typing import Callable
 from pathlib import Path
-
 # from audiotown.consts.ffmpeg_config import FFmpegConfig
 # from audiotown.consts.app_context import AppContext
+from audiotown.consts import video
 from audiotown.consts.audio.audio_format import AudioFormat
 from audiotown.consts.birate_tier import BitrateTier
 from audiotown.consts.conversion import ConversionTask, ConversionTaskResult
@@ -18,11 +17,13 @@ from audiotown.consts.video import video_record
 from audiotown.consts.video.policy_decision import PolicyDecision
 from audiotown.consts.video.video_container import VideoContainer
 from audiotown.services.policy_service import PolicyService
-
-
 from .probe_service import ProbeService
 from audiotown.utils import find_external_cover
 from audiotown.logger import SessionLogger
+import logging
+from audiotown.logger import logger
+
+# logger = logging.getLogger(__name__)
 
 
 class ConvertService:
@@ -58,8 +59,8 @@ class ConvertService:
         file_path: Path,
         target: AudioFormat,
         target_path: Path,
-        bit_rate: Optional[str] = None,
-    ) -> Tuple[bool, str]:
+        bit_rate: str| None = None,
+    ) -> tuple[bool, str]:
         """
         Converts a single FLAC to ALAC (m4a) with cover art integration. Support both lossless (alac) and lossy (aac)
         Returns True if successful, False otherwise.
@@ -232,6 +233,7 @@ class ConvertService:
             
             stdout_data, stderr_data = process.communicate()
             stderr_data = stderr_data or ""
+            
             if process.returncode != 0:
                 # stderr_data = process.stderr.read() if process.stderr else ""
                 self._cleanup_bad_output(dst=temp_output_path)
@@ -264,29 +266,30 @@ class ConvertService:
         file_path: Path,
         target: VideoContainer,
         output_path: Path,
-    ) -> Tuple[bool, str]:
-        media_info = self.probe_service.probe_video(file_path)
-        if media_info is None:
+    ) -> tuple[bool, str]:
+        video_record = self.probe_service.probe_video(file_path)
+        if video_record is None:
             return False, "file can't be converted"
         decision = PolicyDecision()
-        policy = PolicyService().get_policy_based_on_media_info(media_info)
+        policy = PolicyService().get_policy_based_on_video_record(video_record)
         if policy is not None:
-            policy.apply(media=media_info, decision=decision)
+            policy.apply(video_record=video_record, decision=decision)
         if target == VideoContainer.MP4:
             target_policy = AppleSafeMp4TargetPolicy()
-            target_policy.apply(decision=decision)
+            target_policy.apply(video_record=video_record, decision=decision)
         builder_service = CommandBuilderService(self.ffmpeg_path, self.logger)
         temp_output = output_path.with_name(
              f"{output_path.stem}.{os.getpid()}.tmp{output_path.suffix}"
         )
         temp_output_path = Path(temp_output)
         args = builder_service.build(
-            media_info=media_info, output_path=temp_output_path, decision=decision
+            video_record=video_record, output_path=temp_output_path, decision=decision
         )
         cmd = args
         # cmd.insert(1, "-threads")
         # cmd.insert(2, "1")
         # temp output before the conversion completes
+
         try:
             process = subprocess.Popen(
             # process = subprocess.run(
@@ -302,6 +305,8 @@ class ConvertService:
             # stderr_data = ""
             _, stderr_data = process.communicate()
             stderr_data = stderr_data or ""
+
+            # self.logger.regular_log(f'In ConvertService...pcocess.returncode: {process.returncode}....stderr_data: {stderr_data}')
             if process.returncode != 0:
                 # stderr_data = process.stderr.read() if process.stderr else ""
                 self._cleanup_bad_output(dst=temp_output_path)
@@ -371,15 +376,15 @@ class ConvertService:
 
     def run_parallel_conversion(
         self,
-        all_tasks: List[ConversionTask],
+        all_tasks: list[ConversionTask],
         progress_callback: Callable[[int, int], None] | None = None,
-    ) -> List[ConversionTaskResult]:
+    ) -> list[ConversionTaskResult]:
         """
         The main engine driver.
         Input: A list of ConversionTask dictionaries.
         Output: A list of results (path, success, message).
         """
-        results: List[ConversionTaskResult] = []
+        results: list[ConversionTaskResult] = []
         max_workers = max(1, (os.cpu_count() or 4) - 1)
         # this following is a setup for I/O bound while converison is cpu intensive.
 

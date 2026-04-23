@@ -3,11 +3,11 @@ from audiotown.consts.video import VideoRecord, PolicyDecision, MediaAction
 
 class AVIPolicy(BaseFormatPolicy):
 
-    def apply(self, media:VideoRecord, decision: PolicyDecision) -> None: 
-        file = media.file
+    def apply(self, video_record:VideoRecord, decision: PolicyDecision) -> None: 
+        file = video_record.file
         if file is None:
             return 
-        suffix = media.file.suffix.lower()
+        suffix = video_record.file.suffix.lower()
 
         decision.action = MediaAction.TRANSCODE
         decision.needs_genpts = True

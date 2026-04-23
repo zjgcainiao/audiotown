@@ -1,6 +1,5 @@
 from abc import ABC, abstractmethod
 from audiotown.consts.video import VideoRecord, PolicyDecision
-from typing import Dict, List
 
 class BaseFormatPolicy(ABC):
     # @abstractmethod
@@ -9,7 +8,7 @@ class BaseFormatPolicy(ABC):
     #     raise NotImplementedError
     
     @abstractmethod
-    def apply(self, media:VideoRecord, decision: PolicyDecision) -> None:
+    def apply(self, video_record: VideoRecord, decision: PolicyDecision) -> None:
         raise NotImplementedError
 
     # def get_conversion_flags(self, probe_data: dict) -> List[str]:

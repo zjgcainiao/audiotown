@@ -1,7 +1,6 @@
 from __future__ import annotations
 from enum import Enum
 
-
 class VideoContainer(Enum):
     MP4 = (".mp4", "mp4", "MPEG-4 Part 14")
     MKV = (".mkv", "matroska", "Matroska")
@@ -10,6 +9,18 @@ class VideoContainer(Enum):
     WEBM = (".webm", "webm", "WebM")
     RMVB = (".rmvb", "rm", "RealMedia Variable Bitrate")
     RM = (".rm", "rm", "RealMedia")
+    M4V = (".m4v", "mp4", "Apple M4V / MPEG-4 Video")
+
+    M2TS = (".m2ts", "mpegts", "MPEG-2 Transport Stream")
+    TS = (".ts", "mpegts", "MPEG Transport Stream")
+    MTS = (".mts", "mpegts", "AVCHD / MPEG Transport Stream")
+    VOB = (".vob", "vob", "DVD Video Object") # also vob, dvd
+    MPG = (".mpg", "mpeg", "MPEG Program Stream")
+    MPEG = (".mpeg", "mpeg", "MPEG Program Stream")
+
+    WMV = (".wmv", "asf", "Windows Media Video")
+    FLV = (".flv", "flv", "Flash Video")
+    _3GP = (".3gp", "3gp", "3GPP Multimedia")
 
     def __init__(self, suffix: str, muxer: str, description: str):
         self.suffix = suffix

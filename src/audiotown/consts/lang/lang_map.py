@@ -149,9 +149,6 @@ def map_language(lang_code):
     return lang_map.get(lang_code.lower(), lang_code.lower())
 
 
-
-
-
 # Create a separate mapping for display names
 LANG_DISPLAY_NAMES = {
     "eng": "English",

@@ -27,3 +27,11 @@ class SubtitleStreamSpec:
 
         v = self.lang.strip().lower()
         return LANGUAGE_MAP.get(v, v)
+    
+    @property
+    def is_bitmap_subtitle(self) -> bool:
+        """Identify image-based subtitles that cannot be converted to text."""
+        if not self.codec_name:
+            return False
+        # pgs and dvdsub are the most common bitmap formats
+        return self.codec_name.strip().lower() in {"hdmv_pgs_subtitle", "dvd_subtitle", "dvdsub", "pgssub"}

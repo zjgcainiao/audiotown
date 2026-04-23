@@ -18,9 +18,10 @@ class AudioStreamSpec:
     channel_layout: str | None
     dmix_mode: int | None
     profile: int | None
-
+    codec_tag_string : str | None
 
     raw_tags: dict[str, Any] | None  = None  # <--- The "Trash Can" for this specific stream
+
     # newly added 2024-04-01
     is_default: bool = field(default=False)
     lang: Optional[str] = field(default=None)
@@ -48,3 +49,11 @@ class AudioStreamSpec:
           return True
        else:
           return False
+       
+    
+    @property
+    def is_drm_protected(self):
+        if self.codec_tag_string:
+            if "drm" in self.codec_tag_string.lower():
+                return True
+        return False

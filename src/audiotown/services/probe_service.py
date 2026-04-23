@@ -460,6 +460,7 @@ class ProbeService:
                             or stream.get("bits_per_sample"),
                             int,
                         ),
+                        codec_tag_string = stream.get("codec_tag_string", None),
                         codec_name=stream.get("codec_name") or None,
                         bit_rate=safe_cast(stream.get("bit_rate"), int),
                         channels=safe_cast(stream.get("channels"), int),

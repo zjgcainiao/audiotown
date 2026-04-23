@@ -5,3 +5,5 @@ from .audio_format import AudioFormat
 from .audio_family import AudioFamily
 from .duplicate_group import DuplicateGroup
 from .quality_tier import QualityTier
+
+from .audio_bitrate_kbps import AudioBitRateKbps

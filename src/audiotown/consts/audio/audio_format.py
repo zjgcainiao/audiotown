@@ -65,6 +65,11 @@ class AudioFormat(Enum):
         return {member.ext for member in cls}
     
     @classmethod
+    def supported_codecs(cls) -> set[str]:
+        """Returns all unique extensions we care about for scanning."""
+        return {member.codec_name for member in cls}
+
+    @classmethod
     def codec_choices(cls) -> list[str]:
         return [cls.ALAC.codec_name, cls.AAC.codec_name]
 

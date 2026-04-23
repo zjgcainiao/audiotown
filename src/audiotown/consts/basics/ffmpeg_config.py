@@ -1,9 +1,21 @@
 
 import shutil
 import sys
+import subprocess
 from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Optional
+from functools import  cached_property
+
+@dataclass(frozen=True)
+class VideoToolboxSupport:
+    h264: bool = False
+    hevc: bool = False
+
+    @property
+    def any(self) -> bool:
+        return self.h264 or self.hevc
+
 
 @dataclass(frozen=True)
 class FFmpegConfig:
@@ -78,4 +90,39 @@ class FFmpegConfig:
         return (
             f"FFmpegConfig(ffmpeg={self.ffmpeg_path or 'not found'}, "
             f"ffprobe={self.ffprobe_path or 'not found'})"
+        )
+    def _get_encoders_output(self) -> str:
+        ffmpeg = self.require_ffmpeg()
+        result = subprocess.run(
+            [ffmpeg, "-hide_banner", "-encoders"],
+            capture_output=True,
+            text=True,
+            errors="replace",
+            check=False,
+        )
+        if result.returncode != 0:
+            stderr = (result.stderr or "").strip()
+            raise RuntimeError(f"Failed to query ffmpeg encoders: {stderr}")
+        return result.stdout or ""
+
+    @cached_property
+    def available_encoders(self) -> set[str]:
+        encoders: set[str] = set()
+        for line in self._get_encoders_output().splitlines():
+            line = line.strip()
+            if not line or line.startswith("Encoders:") or line.startswith("------"):
+                continue
+
+            parts = line.split(None, 2)
+            if len(parts) >= 2:
+                encoders.add(parts[1].lower())
+        return encoders
+
+    def supports_encoder(self, encoder_name: str) -> bool:
+        return encoder_name.lower() in self.available_encoders
+
+    def videotoolbox_support(self) -> VideoToolboxSupport:
+        return VideoToolboxSupport(
+            h264=self.supports_encoder("h264_videotoolbox"),
+            hevc=self.supports_encoder("hevc_videotoolbox"),
         )

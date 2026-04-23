@@ -13,7 +13,7 @@ from .audio_family import AudioFamily
 from ..basics.type_summary import TypeSummary
 from .duplicate_group import DuplicateGroup
 from .audio_readable import AudioReadable
-from typing import Iterable, Tuple
+
 
 
 @dataclass(slots=True)
