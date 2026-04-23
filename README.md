@@ -1,27 +1,46 @@
-# Summary
+# Audiotown: The High-Performance Media Rescuer
 
-## A lightweight, high-performance CLI for managing audio libraries. Optimized for FLAC to Apple-friendly (ALAC/AAC) conversion with smart deduplication.
+A lightweight, "Shokunin" grade CLI for standardizing your media library. Optimized for moving legacy files into a high-integrity, Apple-compatible collection.
 
-1. Optimized for FLAC-to-Apple-friendly conversion, Audiotown scans large music folders quickly, summarizes what is in your collection, and converts `.flac `files into .m4a using either `ALAC` (lossless) or `AAC` (lossy). [know more about the codec](https://ffmpeg.org/ffmpeg-codecs.html).
-2. It preserves important metadata during conversion, including artist, album, track information, and embedded artwork.
-3. In practical use, it can scan a folder with roughly 13,000 files in about 50-60 seconds, making it suitable for large personal libraries.
+## Performance & Core Features
 
-## whats new
+1. Rapid Library Auditing: Built for scale. Scans ~13,000 files in under 60 seconds.
+2. Lossless Audio Migration: Batch-converts .flac to Apple-friendly .m4a using either ALAC (Lossless) or AAC (High Quality).
+3. Metadata Integrity: Preserves tags (Artist, Album, Track) and ensures high-resolution artwork is embedded directly into the converted files.
+4. Smart Deduplication: Avoids redundant processing by identifying existing compliant files.
 
-1. added video upgrade feature via `--to-video` flag. it trancodes (converts) legacy `AVI` and `RMVB` files into Apple safe `MP4`. 
-   1. Output format: H264/AAC 192K
-   2. Maximium compability with Apple Hardwares, including iPhone 4 or later.
-   3. Use `mov_text` when subtitles are detected.
-   4. `audiotown convert '/my/path/to/video_folder/' --to-video=mp4`
-2. improved terminal output.
-3. Bug fixing.
+## What’s New v1.11.4: The Video Upgrade
+The new `--to-video` flag transforms Audiotown from an audio tool into a full-scale Media Library Assistant.
+1. Video "Upgrade" Capabilities
+   1. Format Normalization: Transcodes legacy AVI, RMVB, and MKV into standardized Apple-safe MP4 containers.
+   2. Intelligent Encoding: Uses H.264/AAC or H.265/AAC configurations.
+   3. Smart Remuxing: If the source streams are already compliant, Audiotown performs a "Lightning Fast" remux (copy) instead of a full transcode to preserve 100% quality.
+   4. 10-bit to 8-bit Correction: Automatically handles the "10-bit H.264" problem by transcoding incompatible yuv420p10le streams to standard 8-bit yuv420p for hardware compatibility.
+   5. Legacy Hardware Support: Optimized for maximum compatibility with iPhone 5s and later.
+   6. Subtitle Preservation: Detects and converts compatible subtitle streams to mov_text for native playback on Apple devices.
 
-## Prefer a Mac app instead?
+2. 🛠 Improved UX
+   1. Polished Terminal Output: Enhanced progress tracking and error reporting.
+   2. Refined CLI Logic: Improved handling of edge cases and path-based batching.
+3. Quck Start
+      ```zsh
+      # audios
+      audiotown convert '/path/to/audio_folder/' --report-path=/another/path/
+      # videos
+      audiotown convert '/path/to/video_folder/' --to-video=mp4
+      ```
+##  Prefer a Native macOS Experience?
+1. If you want the power of this workflow in a dedicated desktop environment, check out Audiotown Pro. It is a rugged media rescuer designed specifically for the Apple ecosystem.
 
-If you are interested in a native macOS app for this workflow, check out Audiotown Pro.
-It brings the same core idea into a dedicated desktop experience: scan your library, inspect what is in it, and convert .flac files into Apple-friendly `.m4a` audio with `ALAC` or `AAC`, while preserving metadata and artwork from the original files.
+2. Why use the Pro version?
+   1. _Deep Library Auditing_: Scan your video and audio collections for actionable metrics: health scores, "Direct Play" readiness, codec compliance, and metadata gaps (languages, release years, etc.).
+   2. _Lossless Audio Integrity_: Batch-convert FLAC to Apple-compatible M4A using ALAC (Lossless) or AAC. Includes automated high-res artwork embedding.
+   3. _Legacy Video Recovery_: Seamlessly move AVI, RMVB, MKV, and MP4 files into Apple-safe formats. Features intelligent subtitle handling (including OCR-ready text conversion) to ensure your legacy media actually plays on modern hardware.
+   4. Built for Stamina: Designed to handle thousands of files with the same technical rigor you expect from high-end financial or engineering tools.
 
-[Learn more about Audiotown Pro](https://holleratme.gumroad.com/l/dclqyl)
+3. Get Audiotown Pro on Gumroad
+   1. [Learn more about Audiotown Pro at gumRoad](https://holleratme.gumroad.com/l/dclqyl)
+
 
 # CLI Commands
 
@@ -124,6 +143,7 @@ audiotown convert '/my/path/to/video_folder/' --to-video=mp4 --report-path
 ```
 
 ## Advanced Options
+
 1. overview
 
   |Option|	Description|	Default|
