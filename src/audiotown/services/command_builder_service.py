@@ -8,6 +8,7 @@ from audiotown.consts.video import (
     SubtitleMode,
     MediaAction,
     VideoCodec,
+    VideoContainer
 )
 
 
@@ -20,6 +21,8 @@ from audiotown.consts.video.video_record import VideoRecord
 from audiotown.consts.lang.lang_map import LANGUAGE_MAP
 from audiotown.logger import logger, SessionLogger
 from typing import Sequence, TypeVar
+
+from audiotown.video.policies import mp4
 
 
 
@@ -50,7 +53,7 @@ class CommandBuilderService:
         self, video_record: VideoRecord, output_path: Path, decision: PolicyDecision
     ) -> list[str]:
 
-        first_video = video_record.first_audio_stream if video_record.has_playable_av else None
+        first_video = video_record.first_video_stream if video_record.has_playable_av else None
         if not video_record.has_playable_av or first_video is None:
             return list()
         argv = [self.ffmpeg_path, "-hide_banner", "-loglevel", "error", "-y"]
@@ -71,7 +74,16 @@ class CommandBuilderService:
             # LIGHTNING FAST: Just move the data packets
             argv.extend(["-c:v", "copy"])
             argv.extend(["-c:a", "copy"])
+            # still checks the `-tag:v`
+            video_stream_decision = decision.video_stream_decisions[0] if len(decision.video_stream_decisions)==1 else None
+            if video_stream_decision is not None:
+                if video_stream_decision.encoder == VideoEncoder.LIBX264:
+                    argv.extend([f"-tag:v", "avc1"])
+                if video_stream_decision.encoder == VideoEncoder.LIBX265:
+                    argv.extend([f"-tag:v", "hvc1"])
             # ADD THIS: Force the tag even during a copy
+            logger.regular_log(f"...In CommandBuilderService... first_video.codec_name: {first_video.codec_name}..")
+            logger.regular_log(f"...In first_video.codec_name ==VideoCodec.HEVC.ffprobe_name: {first_video.codec_name ==VideoCodec.HEVC.ffprobe_name}..")
             if first_video.codec_name ==VideoCodec.HEVC.ffprobe_name:
                 argv.extend(["-tag:v", "hvc1"]) 
             if first_video.codec_name == VideoCodec.H264.ffprobe_name:

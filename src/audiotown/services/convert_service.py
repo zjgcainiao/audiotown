@@ -287,8 +287,8 @@ class ConvertService:
         )
         cmd = args
 
-        # logger.regular_log(f"In ConvertService.... decision: {decision}\n")
-        # logger.regular_log(f"In ConvertService.... cmd: {cmd}")
+        logger.regular_log(f"In ConvertService.... decision: {decision}\n")
+        logger.regular_log(f"In ConvertService.... cmd: {cmd}")
         # cmd.insert(1, "-threads")
         # cmd.insert(2, "1")
         # temp output before the conversion completes

@@ -6,52 +6,7 @@ from audiotown.logger import logger
 
 class MP4Policy(BaseFormatPolicy):
     def apply(self, video_record: VideoRecord, decision: PolicyDecision) -> None:
-        # video = video_record.first_video_stream
-        # if not video:
-        #     return
-        # if not decision.audio_stream_decisions and not decision.video_stream_decisions:
-            
-        #     # If the spec says it's not ready, we ensure transcoding is triggered
-        #     if not video.is_apple_ready:
-        #         if video.is_vfr:
-        #             decision.is_variable_frame_rate = True
-        #             decision.target_frame_rate = video.r_frame_rate
-
-        #         # We add notes to the decision for logging
-        #         decision.repair_notes.append(f"Video not ready: {video.codec_name}/{video.pix_fmt}")
-
-        #     # 2. Check All Audio Streams
-        #     # all() returns True if the list is empty, which is correct for silent videos
-        #     audio_streams = video_record.audio_streams or []
-        #     all_audio_ready = all(a.is_apple_ready for a in audio_streams)
-            
-        #     if not all_audio_ready:
-        #         decision.repair_notes.append("One or more audio streams not AAC.")
-
-        #     # 3. Final Decision: Is the whole file "Apple Ready"?
-        #     if video.is_apple_ready and all_audio_ready:
-        #         decision.action = MediaAction.REMUX
-        #     else:
-        #         decision.action = MediaAction.TRANSCODE
-        
-        # video = video_record.first_video_stream
-        # if not video:
-        #     # We don't process files without video streams in this pipeline
-        #     return
-
-        # # 1. Evaluate Video Health
-        # # This checks for: Codec (H.264), PixFmt (yuv420p), packing (AVCC), and CFR.
-        # video_ready = video.is_apple_ready
-        
-        # if not video_ready:
-        #     decision.repair_notes.append(f"MP4 Video transcode required: {video.codec_name}")
-        #     # If the video is VFR (common in MKVs from handbrake/web-rips), 
-        #     # we flag it for repair during the transcode process.
-        #     if video.is_vfr:
-        #         decision.is_variable_frame_rate = True
-        #         decision.target_frame_rate = video.r_frame_rate
-        #         decision.repair_notes.append("Fixed Variable Frame Rate issues.")
-
+    
         if not video_record.has_playable_av:
             return None
 
@@ -69,6 +24,23 @@ class MP4Policy(BaseFormatPolicy):
         if all_video_ready and all_audio_ready:
             decision.action = MediaAction.SKIP
             decision.repair_notes.append("Mp4 ready for direct play: No action performed.")
+            for vi in video_record.video_streams:
+                
+                stream_codec = VideoCodec.from_codec_name(vi.codec_name) if vi.codec_name is not None else None
+                stream_encoder = VideoEncoder.from_video_codec(stream_codec) if stream_codec is not None else None
+                pixel_format = vi.pix_fmt
+                stream_mode = StreamDecision.COPY if stream_codec in [VideoCodec.HEVC, VideoCodec.H264] else StreamDecision.TRANSCODE
+                VideoStreamDecision(
+                        stream_index=vi.stream_index or 0,
+                        mode=stream_mode,
+                        codec= stream_codec,
+                        encoder=stream_encoder,
+                        pixel_format=pixel_format,
+                        is_vfr=vi.is_vfr,
+                        target_frame_rate=vi.r_frame_rate
+
+                    )
+
         else:
             decision.action = MediaAction.TRANSCODE
             # fine-grained per stream control
