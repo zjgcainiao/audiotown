@@ -25,6 +25,7 @@ class VideoStreamDecision:
     mode: StreamDecision  # "copy" | "transcode"
     codec: VideoCodec | None = None
     encoder: VideoEncoder | None = None
+    pixel_format: PixelFormat | None = None
     is_vfr: bool = False
     target_frame_rate: str | None = None
     tag: str | None = None

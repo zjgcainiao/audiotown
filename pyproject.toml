@@ -16,7 +16,7 @@ readme = "README.md"
 authors = [
   { name="Stephen Wang", email="holleratme420@gmail.com" },
 ]
-description = "Convert Flac to Apple '.m4a' files (alac, aac)"
+description = "Media Library Assistant and Legacy Media Rescuser for Apple Ecosystem "
 classifiers = [
     "Programming Language :: Python :: 3",
     "Operating System :: OS Independent",

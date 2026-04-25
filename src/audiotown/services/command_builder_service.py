@@ -1,12 +1,13 @@
 from pathlib import Path
 from dataclasses import dataclass
+from audiotown.consts import video
 from audiotown.consts.audio.audio_format import AudioFormat
 from audiotown.consts.audio.audio_bitrate_kbps import AudioBitRateKbps
 from audiotown.consts.video import (
     PolicyDecision,
     SubtitleMode,
     MediaAction,
-
+    VideoCodec,
 )
 
 
@@ -49,6 +50,9 @@ class CommandBuilderService:
         self, video_record: VideoRecord, output_path: Path, decision: PolicyDecision
     ) -> list[str]:
 
+        first_video = video_record.first_audio_stream if video_record.has_playable_av else None
+        if not video_record.has_playable_av or first_video is None:
+            return list()
         argv = [self.ffmpeg_path, "-hide_banner", "-loglevel", "error", "-y"]
 
         if decision.needs_genpts:
@@ -61,12 +65,17 @@ class CommandBuilderService:
         # argv.extend(["-map", "0:s?"])
         # 3. Processing Logic
         if decision.action == MediaAction.SKIP:
-            argv.extend(["-map", "0:v:0"])
+            argv.extend(["-map", "0:v"])
             argv.extend(["-map", "0:a?"])
 
             # LIGHTNING FAST: Just move the data packets
             argv.extend(["-c:v", "copy"])
             argv.extend(["-c:a", "copy"])
+            # ADD THIS: Force the tag even during a copy
+            if first_video.codec_name ==VideoCodec.HEVC.ffprobe_name:
+                argv.extend(["-tag:v", "hvc1"]) 
+            if first_video.codec_name == VideoCodec.H264.ffprobe_name:
+                argv.extend(["-tag:v", "avc1"]) 
             if video_record.has_subtitle:
                 argv.extend(["-map", "0:s?"])
                 argv.extend(["-c:s", "copy"])
@@ -78,6 +87,9 @@ class CommandBuilderService:
             argv.extend(["-c:a", "copy"])
             # argv.extend(["-c:s", "copy"])
 
+            # ADD THIS: Force the tag even during a copy
+            
+            argv.extend(["-tag:v", "hvc1"])
         else:
             if any([not decision.audio_stream_decisions, not decision.video_stream_decisions]):
                 return argv
@@ -85,6 +97,10 @@ class CommandBuilderService:
                 argv.extend(["-map", f"0:{v_decision.stream_index}"])
                 if v_decision.mode == StreamDecision.COPY:
                     argv.extend([f"-c:v:{v_out_idx}", "copy"])
+                    if v_decision.encoder == VideoEncoder.LIBX264:
+                        argv.extend([f"-tag:v:{v_out_idx}", "avc1"])
+                    if v_decision.encoder == VideoEncoder.LIBX265:
+                        argv.extend([f"-tag:v:{v_out_idx}", "hvc1"])
                 elif v_decision.mode == StreamDecision.TRANSCODE:
                     argv.extend([f"-c:v:{v_out_idx}", v_decision.encoder.value if v_decision.encoder is not None else VideoEncoder.LIBX265.value])
                     # argv.extend([f"-c:v:{v_out_idx}", v_decision.encoder.value])
@@ -99,6 +115,7 @@ class CommandBuilderService:
                             f"-tag:v:{v_out_idx}", "avc1",
                         ])
                     elif v_decision.encoder == VideoEncoder.LIBX265:
+                        
                         argv.extend([
                             f"-crf:v:{v_out_idx}", "22",
                             f"-preset:v:{v_out_idx}", "medium",

@@ -1,3 +1,4 @@
+from audiotown.consts.video.pixel_format_policy import PixelFormat
 from audiotown.consts.video.policy_decision import AudioStreamDecision, StreamDecision, VideoStreamDecision
 from audiotown.consts.video.video_codec import VideoCodec
 from .base_format import BaseFormatPolicy
@@ -8,24 +9,7 @@ from audiotown.consts.audio import AudioFormat, AudioBitRateKbps
 class MKVPolicy(BaseFormatPolicy):
 
     def apply(self, video_record: VideoRecord, decision: PolicyDecision) -> None:
-        # video = video_record.first_video_stream
-        # if not video:
-        #     # We don't process files without video streams in this pipeline
-        #     return
 
-        # # 1. Evaluate Video Health
-        # # This checks for: Codec (H.264), PixFmt (yuv420p), packing (AVCC), and CFR.
-        # video_ready = video.is_apple_ready
-        
-        # if not video_ready:
-        #     decision.repair_notes.append(f"MKV Video transcode required: {video.codec_name}")
-        #     # If the video is VFR (common in MKVs from handbrake/web-rips), 
-        #     # we flag it for repair during the transcode process.
-        #     if video.is_vfr:
-        #         decision.is_variable_frame_rate = True
-        #         decision.target_frame_rate = video.r_frame_rate
-        #         decision.repair_notes.append("Fixed Variable Frame Rate issues.")
-        
         if not video_record.has_playable_av:
             return None
 
@@ -45,14 +29,32 @@ class MKVPolicy(BaseFormatPolicy):
             decision.repair_notes.append("High-quality remux: No re-encoding performed.")
         else:
             decision.action = MediaAction.TRANSCODE
+            
             # fine-grained per stream control
             for vi in video_record.video_streams:
+                pixel_format = vi.pix_fmt
                 stream_codec = VideoCodec.from_codec_name(vi.codec_name) if vi.codec_name is not None else None
                 stream_encoder = VideoEncoder.from_video_codec(stream_codec) if stream_codec is not None else None
-                stream_mode = StreamDecision.TRANSCODE if not stream_codec in [VideoCodec.HEVC, VideoCodec.H264] else StreamDecision.COPY
+                stream_mode = StreamDecision.COPY if stream_codec in [VideoCodec.HEVC, VideoCodec.H264] else StreamDecision.TRANSCODE
                 if stream_mode == StreamDecision.TRANSCODE:
-                    stream_codec = VideoCodec.HEVC
-                    stream_encoder = VideoEncoder.LIBX265
+                    if stream_codec == VideoCodec.H264:
+                        stream_encoder = VideoEncoder.LIBX264
+                        pixel_format = PixelFormat.YUV420P
+                    if stream_codec == VideoCodec.HEVC:
+                        stream_encoder = VideoEncoder.LIBX265
+                        if pixel_format in [PixelFormat.YUV420P,PixelFormat.YUV420P10LE]:
+                            pixel_format = pixel_format
+                        else:
+                            pixel_format = PixelFormat.YUV420P10LE
+                    if stream_codec not in [VideoCodec.H264, VideoCodec.HEVC]:
+                        stream_codec = VideoCodec.HEVC
+                        stream_encoder = VideoEncoder.LIBX265
+                        if pixel_format in [PixelFormat.YUV420P,PixelFormat.YUV420P10LE]:
+                            pixel_format = pixel_format
+                        else:
+                            pixel_format = PixelFormat.YUV420P10LE
+                # now check the pixel_format concistency
+
 
                 decision.video_stream_decisions.append(
                     VideoStreamDecision(
@@ -60,6 +62,7 @@ class MKVPolicy(BaseFormatPolicy):
                         mode=stream_mode,
                         codec= stream_codec,
                         encoder=stream_encoder,
+                        pixel_format=pixel_format,
                         is_vfr=vi.is_vfr,
                         target_frame_rate=vi.r_frame_rate
 

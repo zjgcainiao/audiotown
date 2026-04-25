@@ -1,4 +1,5 @@
 from .base_format import BaseFormatPolicy
+from audiotown.consts.video.pixel_format_policy import PixelFormat
 from audiotown.consts.video import VideoRecord, PolicyDecision, MediaAction, VideoEncoder, VideoCodec, StreamDecision, VideoStreamDecision, AudioStreamDecision
 from audiotown.consts.audio import AudioFormat, AudioBitRateKbps
 from audiotown.logger import logger
@@ -72,19 +73,35 @@ class MP4Policy(BaseFormatPolicy):
             decision.action = MediaAction.TRANSCODE
             # fine-grained per stream control
             for vi in video_record.video_streams:
+                pixel_format = vi.pix_fmt
                 stream_codec = VideoCodec.from_codec_name(vi.codec_name) if vi.codec_name is not None else None
                 stream_encoder = VideoEncoder.from_video_codec(stream_codec) if stream_codec is not None else None
-                stream_mode = StreamDecision.TRANSCODE if not stream_codec in [VideoCodec.HEVC, VideoCodec.H264] else StreamDecision.COPY
+                stream_mode = StreamDecision.COPY if stream_codec in [VideoCodec.HEVC, VideoCodec.H264] else StreamDecision.TRANSCODE
                 if stream_mode == StreamDecision.TRANSCODE:
-                    stream_codec = VideoCodec.HEVC
-                    stream_encoder = VideoEncoder.LIBX265
-
+                    if stream_codec == VideoCodec.H264:
+                        stream_encoder = VideoEncoder.LIBX264
+                        pixel_format = PixelFormat.YUV420P
+                    if stream_codec == VideoCodec.HEVC:
+                        stream_encoder = VideoEncoder.LIBX265
+                        if pixel_format in [PixelFormat.YUV420P,PixelFormat.YUV420P10LE]:
+                            pixel_format = pixel_format
+                        else:
+                            pixel_format = PixelFormat.YUV420P10LE
+                    if stream_codec not in [VideoCodec.H264, VideoCodec.HEVC]:
+                        stream_codec = VideoCodec.HEVC
+                        stream_encoder = VideoEncoder.LIBX265
+                        if pixel_format in [PixelFormat.YUV420P,PixelFormat.YUV420P10LE]:
+                            pixel_format = pixel_format
+                        else:
+                            pixel_format = PixelFormat.YUV420P10LE
+                # now check the pixel_format concistency
                 decision.video_stream_decisions.append(
                     VideoStreamDecision(
                         stream_index=vi.stream_index or 0,
                         mode=stream_mode,
                         codec= stream_codec,
                         encoder=stream_encoder,
+                        pixel_format=pixel_format,
                         is_vfr=vi.is_vfr,
                         target_frame_rate=vi.r_frame_rate
 
