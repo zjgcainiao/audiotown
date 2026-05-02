@@ -249,7 +249,11 @@ class VideoStreamSpec:
         # 1. Codec must be H.264 or HEVC
         # logger.info(f"--- In the VideoStreamSpec, self.codec_name: {self.codec_name}...self.is_annex_b: {self.is_annex_b}.....self.pix_fmt: {self.pix_fmt}...self.bit_depth: {self.bit_depth}...self.is_vfr: {self.is_vfr}")
         # logger.info(f"---  .....self.r_frame_rate: {self.r_frame_rate}...self.avg_frame_rate: {self.avg_frame_rate}")
-        if self.codec_name not in {
+        if self.codec_name is None:
+            return False
+        
+        codec_name = self.codec_name.strip().lower()
+        if codec_name not in {
             VideoCodec.H264.ffprobe_name,
             VideoCodec.HEVC.ffprobe_name,
         }:
@@ -266,23 +270,30 @@ class VideoStreamSpec:
         # Must be 4:2:0 for Apple-safe output
         if not self.pix_fmt.is_420:
             return False
+        
+        # 4. Prefer constant frame rate
+        if self.is_vfr:
+            return False
 
         bit_depth = self.pix_fmt.bit_depth
         if bit_depth is None:
             return False
 
         # H.264: keep conservative at 8-bit
-        if self.codec_name == VideoCodec.H264.ffprobe_name:
+        if codec_name == VideoCodec.H264.ffprobe_name:
+            if self.is_annex_b:
+                return False
             if bit_depth != 8:
                 return False
 
         # HEVC: allow 8-bit and 10-bit
-        elif self.codec_name == VideoCodec.HEVC.ffprobe_name:
+        elif codec_name == VideoCodec.HEVC.ffprobe_name:
             if bit_depth not in {8, 10}:
                 return False
+            if self.codec_tag_string is None:
+                return False
+            if "hvc1" not in self.codec_tag_string.strip().lower():
+                return False
 
-        # 4. Prefer constant frame rate
-        if self.is_vfr:
-            return False
 
         return True

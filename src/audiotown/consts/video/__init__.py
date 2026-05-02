@@ -1,6 +1,6 @@
 from .media_action import MediaAction
 from .video_record import VideoRecord
-from .policy_decision import PolicyDecision, VideoStreamDecision, AudioStreamDecision, StreamDecision
+from .policy_decision import PolicyDecision, VideoStreamDecision, AudioStreamDecision, StreamDecision, SubtitleStreamDecision
 from .probe_summary import ProbeSummary
 from .video_encoder import VideoEncoder
 from .video_codec import VideoCodec
@@ -14,8 +14,6 @@ from .pixel_format_policy import PixelFormatPolicy, PixelFormat,PixelFormatGroup
 from .quality_profile import QualityProfile
 from .audio_stream_spec import AudioStreamSpec
 from .apple_compatiblity_level import AppleCompatibilityLevel
-# from ..lang.lang_map import LANGUAGE_MAP
-
 
 from .apple_compatibility import AppleCompatibility
 from .attachment_stream_spec import AttachmentStreamSpec

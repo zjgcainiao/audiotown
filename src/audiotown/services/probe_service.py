@@ -399,7 +399,6 @@ class ProbeService:
         video_specs: list[VideoStreamSpec] = []
         audio_specs: list[AudioStreamSpec] = []
         subtitle_specs: list[SubtitleStreamSpec] = []
-        subtitle_specs: list[SubtitleStreamSpec] = []
         attachment_specs: list[AttachmentStreamSpec] = []
         attached_pic_specs: list[AttachedPicSpec] = []
 

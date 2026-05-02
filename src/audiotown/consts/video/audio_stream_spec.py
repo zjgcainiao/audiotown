@@ -38,7 +38,7 @@ class AudioStreamSpec:
     
     @property
     def is_apple_ready(self) -> bool:
-        if self.codec_name in [AudioCodec.AAC.value]:
+        if self.codec_name in [AudioCodec.AAC.value, AudioCodec.FLAC.value]:
          return True
         return False
     

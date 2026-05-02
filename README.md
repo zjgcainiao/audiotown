@@ -1,6 +1,6 @@
 # Audiotown: The High-Performance Media Rescuer
 
-A lightweight, "Shokunin" grade CLI for standardizing your media library. Optimized for moving legacy files into a high-integrity, Apple-compatible collection.
+A lightweight CLI for standardizing your media library. Optimized for moving legacy files into a high-integrity, Apple-compatible collection.
 
 ## Performance & Core Features
 

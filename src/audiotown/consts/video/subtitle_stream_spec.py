@@ -13,7 +13,6 @@ class SubtitleStreamSpec:
     title: str | None = None
     raw_tags: dict[str, Any] | None= None 
 
-    
     @property
     def is_mp4_text_compatible(self) -> bool:
         if not self.codec_name:

@@ -11,7 +11,7 @@ class AudioBitRateKbps(StrEnum):
     @classmethod
     def choose_aac_bitrate_kbps_output(cls, channels: int | None, source_bitrate_bps: int | None) -> AudioBitRateKbps:
         if channels is None:
-            return cls.MEDIUM
+            return cls.LOW
 
         if channels >= 6:
             return cls.HIGH
