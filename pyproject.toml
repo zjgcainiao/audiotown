@@ -11,12 +11,12 @@ version = {attr = "audiotown.__version__"}
 [project]
 name = "audiotown"
 dynamic = ["version"] 
-requires-python = ">=3.10"
+requires-python = ">=3.13"
 readme = "README.md"
 authors = [
   { name="Stephen Wang", email="holleratme420@gmail.com" },
 ]
-description = "Media Library Assistant and Legacy Media Rescuser for Apple Ecosystem "
+description = "Media Rescuer and Assistant for Apple Ecosystem. Audit audio and video files and optimize them in batch for native playback in Apple TV, iPhone and more. No third party players are required. "
 classifiers = [
     "Programming Language :: Python :: 3",
     "Operating System :: OS Independent",
