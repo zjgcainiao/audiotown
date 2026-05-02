@@ -47,14 +47,16 @@ class PolicyService:
         policy_class = self._POLICY_MAP.get(container, DefaultPolicy)
         return policy_class()
 
-    def get_policy_based_on_video_record(self, video_record: VideoRecord) -> BaseFormatPolicy:
+    def get_policy_based_on_video_record(self, video_record: VideoRecord) -> BaseFormatPolicy | None:
         """Primary selection based on probed container name."""
         if not video_record.has_playable_av:
             self.logger.regular_log(f"No playable streams found for {video_record.file.name}")
-            return DefaultPolicy()
-
+            # return DefaultPolicy()
+            return None
         if video_record.container_name is None:
-            return DefaultPolicy()
+            self.logger.regular_log(f"File corrupted No video container found for {video_record.file.name}")
+            # return DefaultPolicy()
+            return None
         policy_class = self._POLICY_MAP.get(video_record.container_name, DefaultPolicy)
         
         # Update state and return

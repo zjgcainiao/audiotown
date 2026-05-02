@@ -12,11 +12,13 @@ from audiotown.consts.birate_tier import BitrateTier
 from audiotown.consts.conversion import ConversionTask, ConversionTaskResult
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from audiotown.services.command_builder_service import CommandBuilderService
+from audiotown.video.policies.default import DefaultPolicy
 from audiotown.video.policies.target_policy import AppleSafeMp4TargetPolicy
 from audiotown.consts.video import video_record
 from audiotown.consts.video.policy_decision import PolicyDecision
 from audiotown.consts.video.video_container import VideoContainer
 from audiotown.services.policy_service import PolicyService
+from numpy import isin
 from .probe_service import ProbeService
 from audiotown.utils import find_external_cover
 from audiotown.logger import SessionLogger
@@ -272,6 +274,11 @@ class ConvertService:
             return False, "file can't be converted"
         decision = PolicyDecision()
         policy = PolicyService().get_policy_based_on_video_record(video_record)
+        # if isinstance(policy, DefaultPolicy):
+        #     print(f"video_record that caused this issue is {video_record}")
+        #     input("Press Enter to contnue...")
+        if policy is None:
+            return False, "File Unsupported or Corroputed"
         if policy is not None:
             policy.apply(video_record=video_record, decision=decision)
         if target == VideoContainer.MP4:
@@ -321,9 +328,11 @@ class ConvertService:
             temp_output_path.rename(output_path)
             return True, f"FFmpeg Output: {stderr_data.strip()}"
         except subprocess.CalledProcessError as e:
-            # logger.stream(f"CRITICAL: {str(e)}", fg="red")
+            self._cleanup_bad_output(dst=temp_output_path)
+            logger.stream(f"CRITICAL: {str(e)}", fg="red")
             return False, f"CRITICAL: {str(e)}"
         except FileNotFoundError as e:
+            self._cleanup_bad_output(dst=temp_output_path)
             return (
                 False,
                 f"CRITICAL: {str(e)}",
